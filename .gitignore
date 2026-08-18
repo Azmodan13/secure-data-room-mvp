@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+
+# Build output
+.next/
+dist/
+coverage/
+
+# Environment files (examples stay committed)
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Logs and local tooling
+*.log
+.DS_Store
+.idea/
+.vscode/
+
+# Prisma local databases
+*.db
+*.db-journal
+
+# Vercel and Railway local state
+.vercel/
+.railway/
+
+# Local scratch artifacts
+work/
+
+# Local AI tooling instructions
+AGENTS.md
+CLAUDE.md

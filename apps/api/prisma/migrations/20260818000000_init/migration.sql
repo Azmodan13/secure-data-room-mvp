@@ -1,0 +1,2 @@
+-- Initial migration baseline.
+-- Domain tables are introduced in AZM-28 after the accepted ADR is mapped to Prisma.

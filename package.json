@@ -1,0 +1,31 @@
+{
+  "name": "secure-data-room",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=20.19.4 <21"
+  },
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently --kill-others-on-fail --names web,api --prefix-colors cyan,magenta \"npm run dev --workspace web\" \"npm run dev --workspace api\"",
+    "dev:web": "npm run dev --workspace web",
+    "dev:api": "npm run dev --workspace api",
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "lint:fix": "npm run lint:fix --workspaces --if-present",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "npm run test --workspace api",
+    "test:e2e": "npm run test:e2e --workspace api",
+    "prisma:generate": "npm run prisma:generate --workspace api",
+    "prisma:migrate:dev": "npm run prisma:migrate:dev --workspace api",
+    "prisma:migrate:deploy": "npm run prisma:migrate:deploy --workspace api",
+    "prisma:studio": "npm run prisma:studio --workspace api"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "prettier": "^3.6.2"
+  }
+}
