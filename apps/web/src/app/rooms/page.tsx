@@ -3,6 +3,8 @@ import { ThemeSwitcher } from '@/components/theme-switcher';
 import { getCurrentUser } from '@/lib/api/server';
 import { createClient } from '@/lib/supabase/server';
 import { signOut } from './actions';
+import { DataRoomsList } from '@/features/data-rooms/components/data-rooms-list';
+import { CreateDataRoomDialog } from '@/features/data-rooms/components/create-data-room-dialog';
 
 export default async function RoomsPage() {
   const supabase = await createClient();
@@ -39,6 +41,7 @@ export default async function RoomsPage() {
           </div>
 
           <div className="flex items-center gap-3">
+            <CreateDataRoomDialog />
             <ThemeSwitcher />
 
             <form action={signOut}>
@@ -48,6 +51,9 @@ export default async function RoomsPage() {
             </form>
           </div>
         </header>
+        <section className="py-6">
+          <DataRoomsList />
+        </section>
       </div>
     </main>
   );
