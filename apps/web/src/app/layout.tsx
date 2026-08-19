@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { ThemeProvider } from '@/components/theme-provider';
 import './globals.css';
+import { AppProviders } from '@/components/app-providers';
 
 export const metadata: Metadata = {
   title: 'Secure Data Room',
@@ -17,7 +18,7 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
           enableSystem
           disableTransitionOnChange
         >
-          {children}
+          <AppProviders>{children}</AppProviders>
         </ThemeProvider>
       </body>
     </html>

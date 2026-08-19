@@ -4,6 +4,8 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { SupabaseJwtService } from './../src/auth/supabase-jwt.service';
+import { PrismaService } from './../src/prisma/prisma.service';
+import { StorageService } from './../src/storage/storage.service';
 
 type HealthResponse = {
   data: {
@@ -17,10 +19,14 @@ type ErrorResponse = {
 };
 
 describe('AppController (e2e)', () => {
-  let app: INestApplication<App>;
+  let app: INestApplication<App> | undefined;
   const jwtService = {
     verify: jest.fn(),
   };
+  const storageService = {
+    removeObjects: jest.fn(),
+  };
+  const prismaService = {};
 
   beforeEach(async () => {
     jwtService.verify.mockReset();
@@ -30,6 +36,10 @@ describe('AppController (e2e)', () => {
     })
       .overrideProvider(SupabaseJwtService)
       .useValue(jwtService)
+      .overrideProvider(StorageService)
+      .useValue(storageService)
+      .overrideProvider(PrismaService)
+      .useValue(prismaService)
       .compile();
 
     app = moduleFixture.createNestApplication();
@@ -38,7 +48,7 @@ describe('AppController (e2e)', () => {
   });
 
   it('/api/v1/health (GET)', () => {
-    return request(app.getHttpServer())
+    return request(app!.getHttpServer())
       .get('/api/v1/health')
       .expect(200)
       .expect(({ body }) => {
@@ -50,7 +60,7 @@ describe('AppController (e2e)', () => {
   });
 
   it('/api/v1/me (GET) rejects a missing token', () => {
-    return request(app.getHttpServer())
+    return request(app!.getHttpServer())
       .get('/api/v1/me')
       .expect(401)
       .expect(({ body }) => {
@@ -65,7 +75,7 @@ describe('AppController (e2e)', () => {
       new UnauthorizedException('Invalid or expired access token.'),
     );
 
-    return request(app.getHttpServer())
+    return request(app!.getHttpServer())
       .get('/api/v1/me')
       .set('Authorization', 'Bearer not-a-valid-jwt')
       .expect(401)
@@ -77,6 +87,7 @@ describe('AppController (e2e)', () => {
   });
 
   afterEach(async () => {
-    await app.close();
+    await app?.close();
+    app = undefined;
   });
 });
