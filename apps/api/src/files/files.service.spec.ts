@@ -1,0 +1,248 @@
+import {
+  BadRequestException,
+  UnsupportedMediaTypeException,
+} from '@nestjs/common';
+import { UploadStatus, type FileRecord } from '@prisma/client';
+import { createHash } from 'node:crypto';
+import { AccessPolicyService } from '../access-policy/access-policy.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { StorageService } from '../storage/storage.service';
+import { FilesService } from './files.service';
+
+const ownerId = '11111111-1111-4111-8111-111111111111';
+const dataRoomId = '22222222-2222-4222-8222-222222222222';
+const folderId = '33333333-3333-4333-8333-333333333333';
+const clientId = '44444444-4444-4444-8444-444444444444';
+const uploadId = '55555555-5555-4555-8555-555555555555';
+
+type PrismaMock = {
+  folder: { findFirst: jest.Mock };
+  fileRecord: {
+    findFirst: jest.Mock;
+    findUnique: jest.Mock;
+    create: jest.Mock;
+  };
+};
+
+type PolicyMock = {
+  assertCanMutate: jest.Mock;
+};
+
+type StorageMock = {
+  createSignedUploadUrl: jest.Mock;
+  getObjectInfo: jest.Mock;
+  downloadObject: jest.Mock;
+  removeObjects: jest.Mock;
+};
+
+describe('FilesService', () => {
+  let service: FilesService;
+  let prisma: PrismaMock;
+  let policy: PolicyMock;
+  let storage: StorageMock;
+
+  beforeEach(() => {
+    prisma = {
+      folder: { findFirst: jest.fn() },
+      fileRecord: {
+        findFirst: jest.fn(),
+        findUnique: jest.fn(),
+        create: jest.fn(),
+      },
+    };
+    policy = { assertCanMutate: jest.fn().mockResolvedValue(undefined) };
+    storage = {
+      createSignedUploadUrl: jest.fn(),
+      getObjectInfo: jest.fn(),
+      downloadObject: jest.fn(),
+      removeObjects: jest.fn().mockResolvedValue(undefined),
+    };
+
+    service = new FilesService(
+      prisma as unknown as PrismaService,
+      policy as unknown as AccessPolicyService,
+      storage as unknown as StorageService,
+    );
+  });
+
+  it('creates independent signed intents and resolves duplicate batch names', async () => {
+    prisma.folder.findFirst.mockResolvedValue({ id: folderId });
+    prisma.fileRecord.findFirst.mockResolvedValue(null);
+    storage.createSignedUploadUrl
+      .mockResolvedValueOnce('https://storage.test/first')
+      .mockResolvedValueOnce('https://storage.test/second');
+
+    const result = await service.createUploadIntents(ownerId, dataRoomId, {
+      folderId,
+      files: [
+        {
+          clientId,
+          name: 'Report.pdf',
+          sizeBytes: 12,
+          mimeType: 'application/pdf',
+        },
+        {
+          clientId: '66666666-6666-4666-8666-666666666666',
+          name: 'report.PDF',
+          sizeBytes: 15,
+          mimeType: 'application/pdf',
+        },
+      ],
+    });
+
+    expect(result).toHaveLength(2);
+    expect(result.map((intent) => intent.displayName)).toEqual([
+      'Report.pdf',
+      'report (2).pdf',
+    ]);
+    expect(result[0]?.uploadId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+    expect(storage.createSignedUploadUrl).toHaveBeenCalledTimes(2);
+    expect(policy.assertCanMutate).toHaveBeenCalledWith(ownerId, {
+      type: 'dataRoom',
+      id: dataRoomId,
+    });
+  });
+
+  it('rejects a non-PDF extension before creating a signed URL', async () => {
+    await expect(
+      service.createUploadIntents(ownerId, dataRoomId, {
+        files: [
+          {
+            clientId,
+            name: 'notes.txt',
+            sizeBytes: 12,
+            mimeType: 'application/pdf',
+          },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(UnsupportedMediaTypeException);
+
+    expect(storage.createSignedUploadUrl).not.toHaveBeenCalled();
+  });
+
+  it('confirms a verified PDF and creates READY metadata with checksum', async () => {
+    const bytes = Buffer.from('%PDF-1.7\ncontent');
+    const created = fileRecord({ sizeBytes: BigInt(bytes.length) });
+
+    prisma.folder.findFirst.mockResolvedValue({ id: folderId });
+    prisma.fileRecord.findUnique.mockResolvedValue(null);
+    prisma.fileRecord.findFirst.mockResolvedValue(null);
+    prisma.fileRecord.create.mockResolvedValue(created);
+    storage.getObjectInfo.mockResolvedValue({
+      size: bytes.length,
+      contentType: 'application/pdf',
+    });
+    storage.downloadObject.mockResolvedValue(bytes);
+
+    const result = await service.confirmUpload(ownerId, dataRoomId, uploadId, {
+      folderId,
+      name: 'Report.pdf',
+      sizeBytes: bytes.length,
+      mimeType: 'application/pdf',
+    });
+
+    expect(result).toBe(created);
+    expect(prisma.fileRecord.create).toHaveBeenCalledWith({
+      data: {
+        dataRoomId,
+        folderId,
+        name: 'Report.pdf',
+        normalizedName: 'report.pdf',
+        storageKey: `rooms/${dataRoomId}/${uploadId}`,
+        mimeType: 'application/pdf',
+        sizeBytes: BigInt(bytes.length),
+        uploadStatus: UploadStatus.READY,
+        checksum: createHash('sha256').update(bytes).digest('hex'),
+      },
+    });
+    expect(storage.removeObjects).not.toHaveBeenCalled();
+  });
+
+  it('removes an uploaded object when its PDF signature is invalid', async () => {
+    const bytes = Buffer.from('not-a-pdf');
+    prisma.fileRecord.findUnique.mockResolvedValue(null);
+    storage.getObjectInfo.mockResolvedValue({
+      size: bytes.length,
+      contentType: 'application/pdf',
+    });
+    storage.downloadObject.mockResolvedValue(bytes);
+
+    await expect(
+      service.confirmUpload(ownerId, dataRoomId, uploadId, {
+        name: 'fake.pdf',
+        sizeBytes: bytes.length,
+        mimeType: 'application/pdf',
+      }),
+    ).rejects.toBeInstanceOf(UnsupportedMediaTypeException);
+
+    expect(prisma.fileRecord.create).not.toHaveBeenCalled();
+    expect(storage.removeObjects).toHaveBeenCalledWith([
+      `rooms/${dataRoomId}/${uploadId}`,
+    ]);
+  });
+
+  it('rejects a size mismatch and cleans the object', async () => {
+    prisma.fileRecord.findUnique.mockResolvedValue(null);
+    storage.getObjectInfo.mockResolvedValue({
+      size: 20,
+      contentType: 'application/pdf',
+    });
+
+    await expect(
+      service.confirmUpload(ownerId, dataRoomId, uploadId, {
+        name: 'report.pdf',
+        sizeBytes: 10,
+        mimeType: 'application/pdf',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(storage.downloadObject).not.toHaveBeenCalled();
+    expect(storage.removeObjects).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns existing metadata when confirm is retried', async () => {
+    const existing = fileRecord();
+    prisma.fileRecord.findUnique.mockResolvedValue(existing);
+
+    await expect(
+      service.confirmUpload(ownerId, dataRoomId, uploadId, {
+        name: 'report.pdf',
+        sizeBytes: 12,
+        mimeType: 'application/pdf',
+      }),
+    ).resolves.toBe(existing);
+
+    expect(storage.getObjectInfo).not.toHaveBeenCalled();
+    expect(prisma.fileRecord.create).not.toHaveBeenCalled();
+  });
+
+  it('cancels only an uncommitted upload and remains idempotent', async () => {
+    prisma.fileRecord.findUnique.mockResolvedValue(null);
+
+    await service.cancelUpload(ownerId, dataRoomId, uploadId);
+
+    expect(storage.removeObjects).toHaveBeenCalledWith([
+      `rooms/${dataRoomId}/${uploadId}`,
+    ]);
+  });
+});
+
+function fileRecord(overrides: Partial<FileRecord> = {}): FileRecord {
+  return {
+    id: '77777777-7777-4777-8777-777777777777',
+    dataRoomId,
+    folderId: null,
+    name: 'Report.pdf',
+    normalizedName: 'report.pdf',
+    storageKey: `rooms/${dataRoomId}/${uploadId}`,
+    mimeType: 'application/pdf',
+    sizeBytes: 12n,
+    checksum: 'checksum',
+    uploadStatus: UploadStatus.READY,
+    createdAt: new Date('2026-08-19T00:00:00.000Z'),
+    updatedAt: new Date('2026-08-19T00:00:00.000Z'),
+    ...overrides,
+  };
+}

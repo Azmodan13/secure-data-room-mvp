@@ -6,6 +6,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { AccessPolicyModule } from './access-policy/access-policy.module';
 import { DataRoomsModule } from './data-rooms/data-rooms.module';
 import { FoldersModule } from './folders/folders.module';
+import { FilesModule } from './files/files.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { FoldersModule } from './folders/folders.module';
     AccessPolicyModule,
     DataRoomsModule,
     FoldersModule,
+    FilesModule,
   ],
   controllers: [AppController],
 })
