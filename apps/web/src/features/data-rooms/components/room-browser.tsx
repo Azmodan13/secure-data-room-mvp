@@ -7,10 +7,15 @@ import {
   Folder,
   LoaderCircle,
   Upload,
+  FolderInput,
+  Trash2,
+  X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { type DragEvent, useState } from 'react';
+import { toast } from 'sonner';
+import { ApiError } from '@/lib/api/client';
 import { useDataRoom, useDataRoomItems } from '../queries';
 import type { FileItem, FolderItem } from '../types';
 import { CreateFolderDialog } from '@/features/folders/components/create-folder-dialog';
@@ -20,6 +25,38 @@ import { FolderActions } from '@/features/folders/components/folder-actions';
 import { PdfUpload } from '@/features/files/components/pdf-upload';
 import { AccountActions } from '@/components/account-actions';
 import { useFolderUpload } from '@/features/files/components/pdf-upload';
+import { FileActions } from '@/features/files/components/file-actions';
+import { BulkMoveDialog } from '@/features/files/components/bulk-move-dialog';
+import { BulkDeleteDialog } from '@/features/files/components/bulk-delete-dialog';
+import {
+  useBulkDeleteFiles,
+  useBulkMoveFiles,
+} from '@/features/files/mutations';
+import type { BulkMoveConflict } from '@/features/files/types';
+
+const PERSISTED_FILES_DRAG_TYPE = 'application/x-data-room-files';
+
+function readBulkMoveConflicts(details: unknown): BulkMoveConflict[] | null {
+  if (!details || typeof details !== 'object' || !('conflicts' in details)) {
+    return null;
+  }
+
+  const conflicts = details.conflicts;
+
+  if (!Array.isArray(conflicts)) return null;
+
+  return conflicts.filter(
+    (item): item is BulkMoveConflict =>
+      typeof item === 'object' &&
+      item !== null &&
+      'fileId' in item &&
+      typeof item.fileId === 'string' &&
+      'currentName' in item &&
+      typeof item.currentName === 'string' &&
+      'suggestedName' in item &&
+      typeof item.suggestedName === 'string',
+  );
+}
 
 function formatFileSize(sizeBytes: string): string {
   const bytes = Number(sizeBytes);
@@ -44,26 +81,67 @@ function formatFileSize(sizeBytes: string): string {
   return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unitIndex]}`;
 }
 
-function FileRow({ file }: { file: FileItem }) {
+function FileRow({
+  file,
+  canMutate,
+  selected,
+  onSelectedChange,
+}: {
+  file: FileItem;
+  canMutate: boolean;
+  selected: boolean;
+  onSelectedChange: (selected: boolean) => void;
+}) {
   return (
-    <Link
-      href={`/rooms/${file.dataRoomId}/files/${file.id}`}
-      className="flex items-center gap-3 rounded-lg px-3 py-3 transition-colors hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 dark:hover:bg-zinc-800/70"
+    <div
+      draggable={canMutate}
+      onDragStart={(event) => {
+        event.dataTransfer.setData(
+          PERSISTED_FILES_DRAG_TYPE,
+          JSON.stringify([file.id]),
+        );
+        event.dataTransfer.effectAllowed = 'move';
+      }}
+      className={`group flex items-center rounded-lg transition-colors ${
+        selected
+          ? 'bg-indigo-50 dark:bg-indigo-950/40'
+          : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/70'
+      }`}
     >
-      <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-300">
-        <FileText className="size-5" />
-      </div>
-
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
-          {file.name}
-        </p>
-
-        <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-          {formatFileSize(file.sizeBytes)}
-        </p>
-      </div>
-    </Link>
+      {canMutate ? (
+        <label className={`ml-3 flex size-5 shrink-0 items-center justify-center ${selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100'}`}>
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={(event) => onSelectedChange(event.target.checked)}
+            aria-label={`Select ${file.name}`}
+            className="size-4 accent-indigo-600"
+          />
+        </label>
+      ) : null}
+      <Link
+        href={`/rooms/${file.dataRoomId}/files/${file.id}`}
+        draggable={false}
+        className="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40"
+      >
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-300">
+          <FileText className="size-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
+            {file.name}
+          </p>
+          <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+            {formatFileSize(file.sizeBytes)}
+          </p>
+        </div>
+      </Link>
+      {canMutate ? (
+        <div className="shrink-0 pr-2">
+          <FileActions file={file} />
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -71,27 +149,46 @@ type FolderRowProps = {
   dataRoomId: string;
   folder: FolderItem;
   onOpen: () => void;
+  canMutate: boolean;
+  onPersistedFilesDrop: (fileIds: string[], folder: FolderItem) => void;
 };
 
 function FolderRow({
   dataRoomId,
   folder,
   onOpen,
+  canMutate,
+  onPersistedFilesDrop,
 }: FolderRowProps) {
   const [isFileOver, setIsFileOver] = useState(false);
+  const [dragOperation, setDragOperation] = useState<'move' | 'upload' | null>(
+    null,
+  );
   const uploadToFolder = useFolderUpload();
 
   function acceptsFiles(event: DragEvent<HTMLElement>): boolean {
     return event.dataTransfer.types.includes('Files');
   }
 
+  function acceptsPersistedFiles(event: DragEvent<HTMLElement>): boolean {
+    return event.dataTransfer.types.includes(PERSISTED_FILES_DRAG_TYPE);
+  }
+
   function handleDragOver(event: DragEvent<HTMLDivElement>) {
-    if (!acceptsFiles(event)) {
+    if (
+      !canMutate ||
+      (!acceptsFiles(event) && !acceptsPersistedFiles(event))
+    ) {
       return;
     }
 
     event.preventDefault();
-    event.dataTransfer.dropEffect = 'copy';
+    event.dataTransfer.dropEffect = acceptsPersistedFiles(event)
+      ? 'move'
+      : 'copy';
+    setDragOperation(
+      acceptsPersistedFiles(event) ? 'move' : 'upload',
+    );
     setIsFileOver(true);
   }
 
@@ -103,15 +200,39 @@ function FolderRow({
     }
 
     setIsFileOver(false);
+    setDragOperation(null);
   }
 
   function handleDrop(event: DragEvent<HTMLDivElement>) {
-    if (!acceptsFiles(event)) {
+    if (
+      !canMutate ||
+      (!acceptsFiles(event) && !acceptsPersistedFiles(event))
+    ) {
       return;
     }
 
     event.preventDefault();
     setIsFileOver(false);
+    setDragOperation(null);
+
+    const persistedFiles = event.dataTransfer.getData(
+      PERSISTED_FILES_DRAG_TYPE,
+    );
+
+    if (persistedFiles) {
+      try {
+        const parsed = JSON.parse(persistedFiles) as unknown;
+        if (
+          Array.isArray(parsed) &&
+          parsed.every((item) => typeof item === 'string')
+        ) {
+          onPersistedFilesDrop(parsed, folder);
+          return;
+        }
+      } catch {
+        return;
+      }
+    }
 
     const files = Array.from(event.dataTransfer.files);
 
@@ -147,29 +268,52 @@ function FolderRow({
           </p>
           {isFileOver ? (
             <p className="mt-0.5 text-xs text-indigo-700 dark:text-indigo-300">
-              Drop to upload here
+              {dragOperation === 'move' ? 'Move here' : 'Drop to upload here'}
             </p>
           ) : null}
         </div>
       </button>
 
-      <div className="shrink-0 pr-2">
-        <FolderActions dataRoomId={dataRoomId} folder={folder} />
-      </div>
+      {canMutate ? (
+        <div className="shrink-0 pr-2">
+          <FolderActions dataRoomId={dataRoomId} folder={folder} />
+        </div>
+      ) : null}
     </div>
   );
 }
 
-export function RoomBrowser({ dataRoomId }: { dataRoomId: string }) {
+export function RoomBrowser({
+  dataRoomId,
+  currentUserId,
+}: {
+  dataRoomId: string;
+  currentUserId: string;
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const folderId = searchParams.get('folderId');
+  const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [initialMoveDestination, setInitialMoveDestination] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+  const [initialMoveConflicts, setInitialMoveConflicts] = useState<
+    BulkMoveConflict[]
+  >([]);
 
   const dataRoomQuery = useDataRoom(dataRoomId);
   const itemsQuery = useDataRoomItems(dataRoomId, folderId);
   const breadcrumbsQuery = useFolderBreadcrumbs(folderId);
+  const bulkMoveMutation = useBulkMoveFiles(dataRoomId, folderId);
+  const bulkDeleteMutation = useBulkDeleteFiles(dataRoomId, folderId);
 
   function openFolder(nextFolderId: string) {
+    setSelectedFileIds(new Set());
     const params = new URLSearchParams(searchParams.toString());
     params.set('folderId', nextFolderId);
 
@@ -217,6 +361,60 @@ export function RoomBrowser({ dataRoomId }: { dataRoomId: string }) {
   }
 
   const items = itemsQuery.data.pages.flatMap((page) => page.data);
+  const canMutate = dataRoomQuery.data.ownerId === currentUserId;
+  const selectedFiles = items.filter(
+    (item): item is FileItem =>
+      item.type === 'file' && selectedFileIds.has(item.id),
+  );
+
+  function setFileSelected(fileId: string, selected: boolean) {
+    setSelectedFileIds((current) => {
+      const next = new Set(current);
+      if (selected) next.add(fileId);
+      else next.delete(fileId);
+      return next;
+    });
+  }
+
+  async function beginDropMove(fileIds: string[], folder: FolderItem) {
+    const effectiveIds =
+      selectedFileIds.has(fileIds[0] ?? '') && selectedFileIds.size > 0
+        ? [...selectedFileIds]
+        : fileIds;
+    const filesToMove = items.filter(
+      (item): item is FileItem =>
+        item.type === 'file' && effectiveIds.includes(item.id),
+    );
+
+    try {
+      await bulkMoveMutation.mutateAsync({
+        files: filesToMove.map((file) => ({ id: file.id })),
+        folderId: folder.id,
+      });
+      toast.success(
+        `${filesToMove.length} file${filesToMove.length === 1 ? '' : 's'} moved to “${folder.name}”.`,
+      );
+      setSelectedFileIds(new Set());
+    } catch (error) {
+      if (error instanceof ApiError && error.code === 'BULK_NAME_CONFLICT') {
+        const conflicts = readBulkMoveConflicts(error.details);
+
+        if (conflicts?.length) {
+          setSelectedFileIds(new Set(effectiveIds));
+          setInitialMoveDestination({ id: folder.id, name: folder.name });
+          setInitialMoveConflicts(conflicts);
+          setMoveOpen(true);
+          return;
+        }
+      }
+
+      toast.error(
+        error instanceof ApiError
+          ? error.message
+          : 'Unable to move the selected files.',
+      );
+    }
+  }
   const uploadInputId = `pdf-upload-${folderId ?? `room-${dataRoomId}`}`;
 
   return (
@@ -247,7 +445,7 @@ export function RoomBrowser({ dataRoomId }: { dataRoomId: string }) {
             </div>
 
             <div className="flex shrink-0 items-center gap-2">
-              {items.length > 0 ? (
+              {canMutate && items.length > 0 ? (
                 <label
                   htmlFor={uploadInputId}
                   role="button"
@@ -265,7 +463,9 @@ export function RoomBrowser({ dataRoomId }: { dataRoomId: string }) {
                 </label>
               ) : null}
 
-              <CreateFolderDialog dataRoomId={dataRoomId} parentId={folderId} />
+              {canMutate ? (
+                <CreateFolderDialog dataRoomId={dataRoomId} parentId={folderId} />
+              ) : null}
             </div>
           </div>
         </header>
@@ -334,12 +534,23 @@ export function RoomBrowser({ dataRoomId }: { dataRoomId: string }) {
         </nav>
 
         <section className="py-6">
+          {selectedFiles.length > 0 ? (
+            <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2.5 dark:border-indigo-900/70 dark:bg-indigo-950/40">
+              <span className="mr-auto text-sm font-medium text-indigo-950 dark:text-indigo-100">
+                {selectedFiles.length} selected
+              </span>
+              <button type="button" onClick={() => { setInitialMoveDestination(null); setInitialMoveConflicts([]); setMoveOpen(true); }} className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-medium text-zinc-700 shadow-sm dark:bg-zinc-900 dark:text-zinc-200"><FolderInput className="size-4" />Move</button>
+              <button type="button" onClick={() => setDeleteOpen(true)} className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-medium text-red-600 shadow-sm dark:bg-zinc-900 dark:text-red-400"><Trash2 className="size-4" />Delete</button>
+              <button type="button" onClick={() => setSelectedFileIds(new Set())} aria-label="Clear selection" className="rounded-lg p-2 text-zinc-500 hover:bg-white dark:hover:bg-zinc-900"><X className="size-4" /></button>
+            </div>
+          ) : null}
           <PdfUpload
             key={folderId ?? 'room-root'}
             dataRoomId={dataRoomId}
             folderId={folderId}
             inputId={uploadInputId}
             hasPersistedItems={items.length > 0}
+            readOnly={!canMutate}
             emptyFolderAction={
               <CreateFolderDialog
                 dataRoomId={dataRoomId}
@@ -355,9 +566,21 @@ export function RoomBrowser({ dataRoomId }: { dataRoomId: string }) {
                   dataRoomId={dataRoomId}
                   folder={item}
                   onOpen={() => openFolder(item.id)}
+                  canMutate={canMutate}
+                  onPersistedFilesDrop={(fileIds, folder) => {
+                    void beginDropMove(fileIds, folder);
+                  }}
                 />
               ) : (
-                <FileRow key={item.id} file={item} />
+                <FileRow
+                  key={item.id}
+                  file={item}
+                  canMutate={canMutate}
+                  selected={selectedFileIds.has(item.id)}
+                  onSelectedChange={(selected) =>
+                    setFileSelected(item.id, selected)
+                  }
+                />
               ),
             )}
           </PdfUpload>
@@ -378,6 +601,39 @@ export function RoomBrowser({ dataRoomId }: { dataRoomId: string }) {
             </div>
           ) : null}
         </section>
+        <BulkMoveDialog
+          key={`${moveOpen ? 'open' : 'closed'}-${initialMoveDestination?.id ?? 'root'}`}
+          open={moveOpen}
+          onOpenChange={setMoveOpen}
+          dataRoomId={dataRoomId}
+          sourceFolderId={folderId}
+          files={selectedFiles}
+          initialDestination={initialMoveDestination}
+          initialConflicts={initialMoveConflicts}
+          isMoving={bulkMoveMutation.isPending}
+          onMove={async (files, destinationFolderId) => {
+            await bulkMoveMutation.mutateAsync({
+              files,
+              folderId: destinationFolderId,
+            });
+            toast.success(`${files.length} file${files.length === 1 ? '' : 's'} moved.`);
+            setSelectedFileIds(new Set());
+            setInitialMoveConflicts([]);
+          }}
+        />
+        <BulkDeleteDialog
+          open={deleteOpen}
+          onOpenChange={setDeleteOpen}
+          files={selectedFiles}
+          isDeleting={bulkDeleteMutation.isPending}
+          onDelete={async () => {
+            await bulkDeleteMutation.mutateAsync(
+              selectedFiles.map((file) => file.id),
+            );
+            toast.success(`${selectedFiles.length} files deleted.`);
+            setSelectedFileIds(new Set());
+          }}
+        />
       </div>
     </main>
   );

@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { RoomBrowser } from '@/features/data-rooms/components/room-browser';
 import { createClient } from '@/lib/supabase/server';
+import { getCurrentUser } from '@/lib/api/server';
 
 export default async function DataRoomPage({
   params,
@@ -16,5 +17,15 @@ export default async function DataRoomPage({
     redirect('/login');
   }
 
-  return <RoomBrowser dataRoomId={dataRoomId} />;
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session) {
+    redirect('/login');
+  }
+
+  const currentUser = await getCurrentUser(session.access_token);
+
+  return <RoomBrowser dataRoomId={dataRoomId} currentUserId={currentUser.id} />;
 }

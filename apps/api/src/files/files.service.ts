@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
   PayloadTooLargeException,
@@ -21,6 +22,10 @@ import {
   type CreateUploadIntentsDto,
   type UploadFileDescriptorDto,
 } from './dto/create-upload-intents.dto';
+import type { MoveFileDto } from './dto/move-file.dto';
+import type { RenameFileDto } from './dto/rename-file.dto';
+import type { BulkMoveFilesDto } from './dto/bulk-move-files.dto';
+import type { BulkDeleteFilesDto } from './dto/bulk-delete-files.dto';
 
 const PDF_SIGNATURE = Buffer.from('%PDF-');
 const MAX_NAME_ATTEMPTS = 100;
@@ -183,6 +188,358 @@ export class FilesService {
     };
   }
 
+  async rename(
+    ownerId: string,
+    fileId: string,
+    dto: RenameFileDto,
+  ): Promise<FileRecord> {
+    await this.accessPolicy.assertCanMutate(ownerId, {
+      type: 'file',
+      id: fileId,
+    });
+
+    const file = await this.getReadyFile(fileId);
+    this.assertPdfDescriptor({
+      name: dto.name,
+      sizeBytes: Number(file.sizeBytes),
+      mimeType: file.mimeType,
+    });
+    const name = normalizeName(dto.name);
+
+    try {
+      return await this.prisma.fileRecord.update({
+        where: { id: file.id },
+        data: {
+          name: name.name,
+          normalizedName: name.normalizedName,
+        },
+      });
+    } catch (error) {
+      if (this.isUniqueConflict(error)) {
+        return this.throwNameConflict(file, file.folderId, name.name);
+      }
+
+      throw error;
+    }
+  }
+
+  async move(
+    ownerId: string,
+    fileId: string,
+    dto: MoveFileDto,
+  ): Promise<FileRecord> {
+    await this.accessPolicy.assertCanMutate(ownerId, {
+      type: 'file',
+      id: fileId,
+    });
+
+    const file = await this.getReadyFile(fileId);
+    const folderId = dto.folderId ?? null;
+
+    if (folderId) {
+      const destination = await this.prisma.folder.findFirst({
+        where: { id: folderId, dataRoomId: file.dataRoomId },
+        select: { id: true },
+      });
+
+      if (!destination) {
+        throw new NotFoundException('Resource is not available.');
+      }
+    }
+
+    if (folderId === file.folderId) {
+      return file;
+    }
+
+    const requestedName = dto.name ?? file.name;
+    this.assertPdfDescriptor({
+      name: requestedName,
+      sizeBytes: Number(file.sizeBytes),
+      mimeType: file.mimeType,
+    });
+    const name = normalizeName(requestedName);
+
+    try {
+      return await this.prisma.fileRecord.update({
+        where: { id: file.id },
+        data: {
+          folderId,
+          name: name.name,
+          normalizedName: name.normalizedName,
+        },
+      });
+    } catch (error) {
+      if (this.isUniqueConflict(error)) {
+        return this.throwNameConflict(file, folderId, name.name);
+      }
+
+      throw error;
+    }
+  }
+
+  async delete(ownerId: string, fileId: string): Promise<void> {
+    const existing = await this.prisma.fileRecord.findUnique({
+      where: { id: fileId },
+    });
+
+    if (!existing) {
+      return;
+    }
+
+    await this.accessPolicy.assertCanMutate(ownerId, {
+      type: 'file',
+      id: fileId,
+    });
+
+    if (existing.uploadStatus !== UploadStatus.DELETING) {
+      const marked = await this.prisma.fileRecord.updateMany({
+        where: { id: fileId, uploadStatus: UploadStatus.READY },
+        data: { uploadStatus: UploadStatus.DELETING },
+      });
+
+      if (marked.count === 0) {
+        throw new NotFoundException('Resource is not available.');
+      }
+    }
+
+    await this.storage.removeObjects([existing.storageKey]);
+    await this.prisma.fileRecord.deleteMany({
+      where: { id: fileId, uploadStatus: UploadStatus.DELETING },
+    });
+  }
+
+  async bulkMove(
+    ownerId: string,
+    dto: BulkMoveFilesDto,
+  ): Promise<FileRecord[]> {
+    const fileIds = dto.files.map((file) => file.id);
+
+    if (new Set(fileIds).size !== fileIds.length) {
+      throw new BadRequestException('Each file may be moved only once.');
+    }
+
+    const files = await this.prisma.fileRecord.findMany({
+      where: { id: { in: fileIds }, uploadStatus: UploadStatus.READY },
+    });
+
+    if (files.length !== fileIds.length) {
+      throw new NotFoundException('Resource is not available.');
+    }
+
+    await Promise.all(
+      files.map((file) =>
+        this.accessPolicy.assertCanMutate(ownerId, {
+          type: 'file',
+          id: file.id,
+        }),
+      ),
+    );
+
+    const dataRoomIds = new Set(files.map((file) => file.dataRoomId));
+
+    if (dataRoomIds.size !== 1) {
+      throw new BadRequestException('Files must belong to the same Data Room.');
+    }
+
+    const dataRoomId = files[0].dataRoomId;
+    const folderId = dto.folderId ?? null;
+
+    if (folderId) {
+      const destination = await this.prisma.folder.findFirst({
+        where: { id: folderId, dataRoomId },
+        select: { id: true },
+      });
+
+      if (!destination) {
+        throw new NotFoundException('Resource is not available.');
+      }
+    }
+
+    const requestedById = new Map(dto.files.map((file) => [file.id, file]));
+    const existingNames = await this.prisma.fileRecord.findMany({
+      where: {
+        dataRoomId,
+        folderId,
+        id: { notIn: fileIds },
+      },
+      select: { normalizedName: true },
+    });
+    const reservedNames = new Set(
+      existingNames.map((file) => file.normalizedName),
+    );
+    const updates: Array<{
+      file: FileRecord;
+      name: string;
+      normalizedName: string;
+    }> = [];
+    const conflicts: Array<{
+      fileId: string;
+      currentName: string;
+      suggestedName: string;
+    }> = [];
+
+    for (const file of files) {
+      const requestedName = requestedById.get(file.id)?.name ?? file.name;
+      this.assertPdfDescriptor({
+        name: requestedName,
+        sizeBytes: Number(file.sizeBytes),
+        mimeType: file.mimeType,
+      });
+      const name = normalizeName(requestedName);
+
+      if (reservedNames.has(name.normalizedName)) {
+        const suggestedName = this.availableNameFromSet(
+          name.name,
+          reservedNames,
+        );
+        reservedNames.add(normalizeName(suggestedName).normalizedName);
+        conflicts.push({
+          fileId: file.id,
+          currentName: file.name,
+          suggestedName,
+        });
+      } else {
+        reservedNames.add(name.normalizedName);
+      }
+
+      updates.push({
+        file,
+        name: name.name,
+        normalizedName: name.normalizedName,
+      });
+    }
+
+    if (conflicts.length > 0) {
+      throw new ConflictException({
+        error: {
+          code: 'BULK_NAME_CONFLICT',
+          message: 'One or more file names are already in use.',
+          details: { conflicts },
+        },
+      });
+    }
+
+    try {
+      return await this.prisma.$transaction(
+        updates.map(({ file, name, normalizedName }) =>
+          this.prisma.fileRecord.update({
+            where: { id: file.id },
+            data: { folderId, name, normalizedName },
+          }),
+        ),
+      );
+    } catch (error) {
+      if (this.isUniqueConflict(error)) {
+        throw new ConflictException({
+          error: {
+            code: 'BULK_NAME_CONFLICT',
+            message: 'A destination name changed. Review and try again.',
+          },
+        });
+      }
+
+      throw error;
+    }
+  }
+
+  async bulkDelete(ownerId: string, dto: BulkDeleteFilesDto): Promise<void> {
+    const files = await this.prisma.fileRecord.findMany({
+      where: {
+        id: { in: dto.fileIds },
+        uploadStatus: { in: [UploadStatus.READY, UploadStatus.DELETING] },
+      },
+    });
+
+    if (files.length === 0) {
+      return;
+    }
+
+    await Promise.all(
+      files.map((file) =>
+        this.accessPolicy.assertCanMutate(ownerId, {
+          type: 'file',
+          id: file.id,
+        }),
+      ),
+    );
+
+    await this.prisma.fileRecord.updateMany({
+      where: {
+        id: { in: files.map((file) => file.id) },
+        uploadStatus: UploadStatus.READY,
+      },
+      data: { uploadStatus: UploadStatus.DELETING },
+    });
+    await this.storage.removeObjects(files.map((file) => file.storageKey));
+    await this.prisma.fileRecord.deleteMany({
+      where: {
+        id: { in: files.map((file) => file.id) },
+        uploadStatus: UploadStatus.DELETING,
+      },
+    });
+  }
+
+  private async getReadyFile(fileId: string): Promise<FileRecord> {
+    const file = await this.prisma.fileRecord.findFirst({
+      where: { id: fileId, uploadStatus: UploadStatus.READY },
+    });
+
+    if (!file) {
+      throw new NotFoundException('Resource is not available.');
+    }
+
+    return file;
+  }
+
+  private async throwNameConflict(
+    file: FileRecord,
+    folderId: string | null,
+    requestedName: string,
+  ): Promise<never> {
+    const suggestedName = await this.findAvailableName(
+      file.dataRoomId,
+      folderId,
+      requestedName,
+      new Set(),
+      file.id,
+    );
+
+    throw new ConflictException({
+      error: {
+        code: 'NAME_CONFLICT',
+        message: 'A file with this name already exists.',
+        details: { suggestedName },
+      },
+    });
+  }
+
+  private availableNameFromSet(
+    requestedName: string,
+    reservedNames: ReadonlySet<string>,
+  ): string {
+    const extensionIndex = requestedName.toLowerCase().lastIndexOf('.pdf');
+    const baseName = requestedName.slice(0, extensionIndex).trimEnd();
+
+    for (let index = 2; index <= MAX_NAME_ATTEMPTS; index += 1) {
+      const suffix = ` (${index})`;
+      const maxBaseLength = 120 - suffix.length - 4;
+      const candidate = normalizeName(
+        `${baseName.slice(0, maxBaseLength).trimEnd()}${suffix}.pdf`,
+      );
+
+      if (!reservedNames.has(candidate.normalizedName)) {
+        return candidate.name;
+      }
+    }
+
+    throw new ConflictException({
+      error: {
+        code: 'BULK_NAME_CONFLICT',
+        message: 'Unable to generate an available file name.',
+      },
+    });
+  }
+
   private async assertDestination(
     ownerId: string,
     dataRoomId: string,
@@ -320,6 +677,7 @@ export class FilesService {
     folderId: string | null,
     requestedName: string,
     reservedNames: ReadonlySet<string> = new Set(),
+    excludeFileId?: string,
   ): Promise<string> {
     const normalized = normalizeName(requestedName);
     const extensionIndex = normalized.name.toLowerCase().lastIndexOf('.pdf');
@@ -346,6 +704,7 @@ export class FilesService {
           dataRoomId,
           folderId,
           normalizedName: candidateName.normalizedName,
+          ...(excludeFileId ? { id: { not: excludeFileId } } : {}),
         },
         select: { id: true },
       });

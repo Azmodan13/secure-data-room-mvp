@@ -135,6 +135,7 @@ enum UploadStatus {
   PENDING
   READY
   FAILED
+  DELETING
 }
 
 enum ShareRole {

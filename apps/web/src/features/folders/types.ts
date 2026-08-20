@@ -25,3 +25,11 @@ export type FolderBreadcrumb = {
 export type FolderBreadcrumbsResponse = {
   data: FolderBreadcrumb[];
 };
+
+export type FoldersPageResponse = {
+  data: Folder[];
+  page: {
+    hasMore: boolean;
+    nextCursor: string | null;
+  };
+};

@@ -12,6 +12,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import type { CreateFolderDto } from './dto/create-folder.dto';
 import type { UpdateFolderDto } from './dto/update-folder.dto';
+import type { ListFoldersQueryDto } from './dto/list-folders-query.dto';
 import type { DeletionSummary } from '../common/deletion/deletion-summary.type';
 import { StorageService } from '../storage/storage.service';
 
@@ -82,6 +83,42 @@ export class FoldersService {
 
       throw error;
     }
+  }
+
+  async listDestinations(
+    ownerId: string,
+    dataRoomId: string,
+    query: ListFoldersQueryDto,
+  ): Promise<{
+    items: Folder[];
+    hasMore: boolean;
+    nextCursor: string | null;
+  }> {
+    await this.accessPolicy.assertCanMutate(ownerId, {
+      type: 'dataRoom',
+      id: dataRoomId,
+    });
+
+    const parentId = query.parentId ?? null;
+
+    if (parentId) {
+      await this.assertParentBelongsToDataRoom(parentId, dataRoomId);
+    }
+
+    const folders = await this.prisma.folder.findMany({
+      where: { dataRoomId, parentId },
+      orderBy: [{ normalizedName: 'asc' }, { id: 'asc' }],
+      take: query.limit + 1,
+      ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
+    });
+    const hasMore = folders.length > query.limit;
+    const items = hasMore ? folders.slice(0, query.limit) : folders;
+
+    return {
+      items,
+      hasMore,
+      nextCursor: hasMore ? (items.at(-1)?.id ?? null) : null,
+    };
   }
 
   async get(userId: string, folderId: string): Promise<Folder> {

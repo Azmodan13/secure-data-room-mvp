@@ -8,9 +8,12 @@ import {
   LoaderCircle,
 } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { AccountActions } from '@/components/account-actions';
 import { useFile, useFileViewUrl } from '../queries';
+import { useDataRoom } from '@/features/data-rooms/queries';
+import { FileActions } from './file-actions';
 
 function formatFileSize(sizeBytes: string): string {
   const bytes = Number(sizeBytes);
@@ -60,12 +63,16 @@ function Unavailable({ dataRoomId }: { dataRoomId: string }) {
 export function PdfViewer({
   dataRoomId,
   fileId,
+  currentUserId,
 }: {
   dataRoomId: string;
   fileId: string;
+  currentUserId: string;
 }) {
+  const router = useRouter();
   const [iframeFailed, setIframeFailed] = useState(false);
   const fileQuery = useFile(fileId);
+  const dataRoomQuery = useDataRoom(dataRoomId);
   const belongsToRoom = fileQuery.data?.dataRoomId === dataRoomId;
   const viewUrlQuery = useFileViewUrl(fileId, belongsToRoom);
 
@@ -88,6 +95,7 @@ export function PdfViewer({
   const backHref = file.folderId
     ? `/rooms/${dataRoomId}?folderId=${file.folderId}`
     : `/rooms/${dataRoomId}`;
+  const canMutate = dataRoomQuery.data?.ownerId === currentUserId;
 
   return (
     <main className="min-h-screen bg-zinc-50 p-4 sm:p-6 dark:bg-zinc-950">
@@ -122,17 +130,25 @@ export function PdfViewer({
               </div>
             </div>
 
-            {viewUrlQuery.data ? (
-              <a
-                href={viewUrlQuery.data.url}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-3.5 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
-              >
-                <ExternalLink className="size-4" />
-                Open in new tab
-              </a>
-            ) : null}
+            <div className="flex items-center gap-2">
+              {viewUrlQuery.data ? (
+                <a
+                  href={viewUrlQuery.data.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-3.5 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                >
+                  <ExternalLink className="size-4" />
+                  Open in new tab
+                </a>
+              ) : null}
+              {canMutate ? (
+                <FileActions
+                  file={file}
+                  onDeleted={() => router.push(backHref)}
+                />
+              ) : null}
+            </div>
           </div>
         </header>
 
