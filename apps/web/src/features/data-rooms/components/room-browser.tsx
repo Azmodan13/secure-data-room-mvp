@@ -6,15 +6,20 @@ import {
   FileText,
   Folder,
   LoaderCircle,
+  Upload,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { type DragEvent, useState } from 'react';
 import { useDataRoom, useDataRoomItems } from '../queries';
-import type { FileItem } from '../types';
+import type { FileItem, FolderItem } from '../types';
 import { CreateFolderDialog } from '@/features/folders/components/create-folder-dialog';
 import { ChevronRight } from 'lucide-react';
 import { useFolderBreadcrumbs } from '@/features/folders/queries';
 import { FolderActions } from '@/features/folders/components/folder-actions';
+import { PdfUpload } from '@/features/files/components/pdf-upload';
+import { AccountActions } from '@/components/account-actions';
+import { useFolderUpload } from '@/features/files/components/pdf-upload';
 
 function formatFileSize(sizeBytes: string): string {
   const bytes = Number(sizeBytes);
@@ -54,6 +59,99 @@ function FileRow({ file }: { file: FileItem }) {
         <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
           {formatFileSize(file.sizeBytes)}
         </p>
+      </div>
+    </div>
+  );
+}
+
+type FolderRowProps = {
+  dataRoomId: string;
+  folder: FolderItem;
+  onOpen: () => void;
+};
+
+function FolderRow({
+  dataRoomId,
+  folder,
+  onOpen,
+}: FolderRowProps) {
+  const [isFileOver, setIsFileOver] = useState(false);
+  const uploadToFolder = useFolderUpload();
+
+  function acceptsFiles(event: DragEvent<HTMLElement>): boolean {
+    return event.dataTransfer.types.includes('Files');
+  }
+
+  function handleDragOver(event: DragEvent<HTMLDivElement>) {
+    if (!acceptsFiles(event)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+    setIsFileOver(true);
+  }
+
+  function handleDragLeave(event: DragEvent<HTMLDivElement>) {
+    const nextTarget = event.relatedTarget;
+
+    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
+      return;
+    }
+
+    setIsFileOver(false);
+  }
+
+  function handleDrop(event: DragEvent<HTMLDivElement>) {
+    if (!acceptsFiles(event)) {
+      return;
+    }
+
+    event.preventDefault();
+    setIsFileOver(false);
+
+    const files = Array.from(event.dataTransfer.files);
+
+    if (files.length > 0) {
+      uploadToFolder(folder.id, folder.name, files);
+    }
+  }
+
+  return (
+    <div
+      data-folder-drop-target
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      className={`flex items-center rounded-lg transition-colors ${
+        isFileOver
+          ? 'bg-indigo-100 ring-2 ring-inset ring-indigo-500 dark:bg-indigo-950/70'
+          : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/70'
+      }`}
+    >
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40"
+      >
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-300">
+          <Folder className="size-5" />
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
+            {folder.name}
+          </p>
+          {isFileOver ? (
+            <p className="mt-0.5 text-xs text-indigo-700 dark:text-indigo-300">
+              Drop to upload here
+            </p>
+          ) : null}
+        </div>
+      </button>
+
+      <div className="shrink-0 pr-2">
+        <FolderActions dataRoomId={dataRoomId} folder={folder} />
       </div>
     </div>
   );
@@ -116,18 +214,23 @@ export function RoomBrowser({ dataRoomId }: { dataRoomId: string }) {
   }
 
   const items = itemsQuery.data.pages.flatMap((page) => page.data);
+  const uploadInputId = `pdf-upload-${folderId ?? `room-${dataRoomId}`}`;
 
   return (
     <main className="min-h-screen bg-zinc-50 p-6 dark:bg-zinc-950">
       <div className="mx-auto max-w-6xl">
         <header className="border-b border-zinc-200 pb-5 dark:border-zinc-800">
-          <Link
-            href="/rooms"
-            className="inline-flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
-          >
-            <ArrowLeft className="size-4" />
-            Data Rooms
-          </Link>
+          <div className="flex items-center justify-between gap-4">
+            <Link
+              href="/rooms"
+              className="inline-flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+            >
+              <ArrowLeft className="size-4" />
+              Data Rooms
+            </Link>
+
+            <AccountActions />
+          </div>
 
           <div className="mt-4 flex items-end justify-between gap-4">
             <div className="min-w-0">
@@ -135,11 +238,31 @@ export function RoomBrowser({ dataRoomId }: { dataRoomId: string }) {
                 {dataRoomQuery.data.name}
               </h1>
 
-              <CreateFolderDialog dataRoomId={dataRoomId} parentId={folderId} />
-
               <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
                 Secure documents and folders
               </p>
+            </div>
+
+            <div className="flex shrink-0 items-center gap-2">
+              {items.length > 0 ? (
+                <label
+                  htmlFor={uploadInputId}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      document.getElementById(uploadInputId)?.click();
+                    }
+                  }}
+                  className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-zinc-300 bg-white px-3.5 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                >
+                  <Upload className="size-4" />
+                  Upload files
+                </label>
+              ) : null}
+
+              <CreateFolderDialog dataRoomId={dataRoomId} parentId={folderId} />
             </div>
           </div>
         </header>
@@ -208,56 +331,33 @@ export function RoomBrowser({ dataRoomId }: { dataRoomId: string }) {
         </nav>
 
         <section className="py-6">
-          {items.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-zinc-300 px-6 py-16 text-center dark:border-zinc-700">
-              <Folder className="mx-auto size-9 text-zinc-400" />
-
-              <h2 className="mt-4 font-semibold text-zinc-950 dark:text-zinc-50">
-                This folder is empty
-              </h2>
-
+          <PdfUpload
+            key={folderId ?? 'room-root'}
+            dataRoomId={dataRoomId}
+            folderId={folderId}
+            inputId={uploadInputId}
+            hasPersistedItems={items.length > 0}
+            emptyFolderAction={
               <CreateFolderDialog
                 dataRoomId={dataRoomId}
                 parentId={folderId}
                 variant="empty"
               />
-
-              <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                Create a folder to organize documents.
-              </p>
-            </div>
-          ) : (
-            <div className="divide-y divide-zinc-100 rounded-xl border border-zinc-200 bg-white p-2 shadow-sm dark:divide-zinc-800 dark:border-zinc-800 dark:bg-zinc-900">
-              {items.map((item) =>
-                item.type === 'folder' ? (
-                  <div
-                    key={item.id}
-                    className="flex items-center rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/70"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => openFolder(item.id)}
-                      className="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40"
-                    >
-                      <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-300">
-                        <Folder className="size-5" />
-                      </div>
-
-                      <p className="min-w-0 flex-1 truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                        {item.name}
-                      </p>
-                    </button>
-
-                    <div className="shrink-0 pr-2">
-                      <FolderActions dataRoomId={dataRoomId} folder={item} />
-                    </div>
-                  </div>
-                ) : (
-                  <FileRow key={item.id} file={item} />
-                ),
-              )}
-            </div>
-          )}
+            }
+          >
+            {items.map((item) =>
+              item.type === 'folder' ? (
+                <FolderRow
+                  key={item.id}
+                  dataRoomId={dataRoomId}
+                  folder={item}
+                  onOpen={() => openFolder(item.id)}
+                />
+              ) : (
+                <FileRow key={item.id} file={item} />
+              ),
+            )}
+          </PdfUpload>
 
           {itemsQuery.hasNextPage ? (
             <div className="mt-6 flex justify-center">
