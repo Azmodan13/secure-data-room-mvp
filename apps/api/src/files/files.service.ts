@@ -188,6 +188,28 @@ export class FilesService {
     };
   }
 
+  async getPublicViewUrl(
+    tokenHash: string,
+    fileId: string,
+  ): Promise<FileViewUrl> {
+    await this.accessPolicy.assertCanReadPublic(tokenHash, {
+      type: 'file',
+      id: fileId,
+    });
+    const file = await this.getReadyFile(fileId);
+
+    if (!(await this.storage.objectExists(file.storageKey))) {
+      throw new NotFoundException('This PDF is no longer available.');
+    }
+
+    return {
+      url: await this.storage.createSignedViewUrl(file.storageKey),
+      expiresAt: new Date(
+        Date.now() + SIGNED_VIEW_URL_TTL_SECONDS * 1000,
+      ).toISOString(),
+    };
+  }
+
   async rename(
     ownerId: string,
     fileId: string,
