@@ -8,6 +8,7 @@ export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
   async resolve(identity: AuthIdentity): Promise<User> {
+    const email = identity.email.trim().toLowerCase();
     const existing = await this.prisma.user.findUnique({
       where: { authUserId: identity.authUserId },
     });
@@ -16,14 +17,14 @@ export class UsersService {
       return this.prisma.user.create({
         data: {
           authUserId: identity.authUserId,
-          email: identity.email,
+          email,
           displayName: identity.displayName,
         },
       });
     }
 
     if (
-      existing.email === identity.email &&
+      existing.email === email &&
       existing.displayName === identity.displayName
     ) {
       return existing;
@@ -32,7 +33,7 @@ export class UsersService {
     return this.prisma.user.update({
       where: { id: existing.id },
       data: {
-        email: identity.email,
+        email,
         displayName: identity.displayName,
       },
     });

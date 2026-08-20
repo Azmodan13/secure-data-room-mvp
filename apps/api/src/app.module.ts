@@ -7,6 +7,7 @@ import { AccessPolicyModule } from './access-policy/access-policy.module';
 import { DataRoomsModule } from './data-rooms/data-rooms.module';
 import { FoldersModule } from './folders/folders.module';
 import { FilesModule } from './files/files.module';
+import { SharingModule } from './sharing/sharing.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { FilesModule } from './files/files.module';
     DataRoomsModule,
     FoldersModule,
     FilesModule,
+    SharingModule,
   ],
   controllers: [AppController],
 })
