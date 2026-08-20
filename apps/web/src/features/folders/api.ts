@@ -5,7 +5,23 @@ import type {
   FolderBreadcrumb,
   FolderBreadcrumbsResponse,
   FolderResponse,
+  FoldersPageResponse,
 } from './types';
+
+export async function getFolderDestinations(
+  dataRoomId: string,
+  parentId: string | null,
+  cursor: string | null,
+): Promise<FoldersPageResponse> {
+  const searchParams = new URLSearchParams({ limit: '50' });
+
+  if (parentId) searchParams.set('parentId', parentId);
+  if (cursor) searchParams.set('cursor', cursor);
+
+  return apiFetch<FoldersPageResponse>(
+    `/data-rooms/${dataRoomId}/folders?${searchParams.toString()}`,
+  );
+}
 import type { DeletionSummary, DeletionSummaryResponse } from '@/lib/api/types';
 
 export async function createFolder({

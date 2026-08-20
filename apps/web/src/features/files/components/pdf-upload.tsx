@@ -41,6 +41,7 @@ type PdfUploadProps = {
   hasPersistedItems: boolean;
   children: ReactNode;
   emptyFolderAction: ReactNode;
+  readOnly?: boolean;
 };
 
 export type UploadToFolder = (
@@ -81,6 +82,7 @@ export function PdfUpload({
   hasPersistedItems,
   children,
   emptyFolderAction,
+  readOnly = false,
 }: PdfUploadProps) {
   const queryClient = useQueryClient();
   const [items, setItems] = useState<UploadQueueItem[]>([]);
@@ -393,6 +395,7 @@ export function PdfUpload({
   );
 
   const { getInputProps, getRootProps, isDragActive, open } = useDropzone({
+    disabled: readOnly,
     accept: { 'application/pdf': ['.pdf'] },
     maxFiles: MAX_UPLOAD_BATCH_SIZE,
     maxSize: MAX_UPLOAD_BYTES,
@@ -439,6 +442,22 @@ export function PdfUpload({
   function remove(clientId: string) {
     setItems((current) =>
       current.filter((item) => item.clientId !== clientId),
+    );
+  }
+
+  if (readOnly) {
+    return hasPersistedItems ? (
+      <div className="divide-y divide-zinc-100 rounded-xl border border-zinc-200 bg-white p-2 shadow-sm dark:divide-zinc-800 dark:border-zinc-800 dark:bg-zinc-900">
+        <FolderUploadContext.Provider value={uploadToFolder}>
+          {children}
+        </FolderUploadContext.Provider>
+      </div>
+    ) : (
+      <div className="rounded-xl border border-dashed border-zinc-300 bg-white px-6 py-12 text-center dark:border-zinc-700 dark:bg-zinc-900">
+        <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+          This folder is empty
+        </p>
+      </div>
     );
   }
 

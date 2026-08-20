@@ -3,7 +3,7 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { LoaderCircle, X } from 'lucide-react';
-import { type ReactNode, useId, useState } from 'react';
+import { type ReactNode, useId, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { ApiError, getSuggestedName } from '@/lib/api/client';
@@ -24,6 +24,7 @@ type RenameDialogProps = {
   onOpenChange?: (open: boolean) => void;
   resourceLabel: string;
   currentName: string;
+  fixedSuffix?: string;
   isPending: boolean;
   onRename: (name: string) => Promise<unknown>;
   onSuccess?: (name: string) => void;
@@ -35,11 +36,13 @@ export function RenameDialog({
   onOpenChange,
   resourceLabel,
   currentName,
+  fixedSuffix,
   isPending,
   onRename,
   onSuccess,
 }: RenameDialogProps) {
   const [internalOpen, setInternalOpen] = useState(false);
+  const [conflictMessage, setConflictMessage] = useState<string | null>(null);
   const open = controlledOpen ?? internalOpen;
 
   function updateOpen(nextOpen: boolean) {
@@ -47,19 +50,26 @@ export function RenameDialog({
     onOpenChange?.(nextOpen);
   }
   const inputId = useId();
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const editableCurrentName =
+    fixedSuffix && currentName.toLowerCase().endsWith(fixedSuffix.toLowerCase())
+      ? currentName.slice(0, -fixedSuffix.length)
+      : currentName;
 
   const {
     register,
     handleSubmit,
     reset,
     setError,
+    setValue,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
-      name: currentName,
+      name: editableCurrentName,
     },
   });
+  const nameField = register('name');
 
   function handleOpenChange(nextOpen: boolean) {
     if (isPending) {
@@ -69,28 +79,49 @@ export function RenameDialog({
     updateOpen(nextOpen);
 
     if (nextOpen) {
-      reset({ name: currentName });
+      reset({ name: editableCurrentName });
+      setConflictMessage(null);
     }
   }
 
   async function onSubmit(values: FormValues) {
-    if (values.name === currentName) {
+    setConflictMessage(null);
+    const nextName = `${values.name}${fixedSuffix ?? ''}`;
+
+    if (nextName.length > 120) {
+      setError('name', {
+        message: `Use no more than ${120 - (fixedSuffix?.length ?? 0)} characters.`,
+      });
+      return;
+    }
+
+    if (nextName === currentName) {
       updateOpen(false);
       return;
     }
 
     try {
-      await onRename(values.name);
-      onSuccess?.(values.name);
+      await onRename(nextName);
+      onSuccess?.(nextName);
       updateOpen(false);
     } catch (error) {
       if (error instanceof ApiError) {
         const suggestedName = getSuggestedName(error.details);
 
         if (error.code === 'NAME_CONFLICT' && suggestedName) {
-          setError('name', {
-            message: `This name is already used. Try “${suggestedName}”.`,
+          const editableSuggestion =
+            fixedSuffix &&
+            suggestedName.toLowerCase().endsWith(fixedSuffix.toLowerCase())
+              ? suggestedName.slice(0, -fixedSuffix.length)
+              : suggestedName;
+
+          setValue('name', editableSuggestion, {
+            shouldDirty: true,
+            shouldValidate: true,
           });
+          setConflictMessage(
+            `A ${resourceLabel.toLowerCase()} with this name already exists here. We changed the proposal to “${suggestedName}” so both can be kept. Review the new name and click Save again.`,
+          );
           return;
         }
 
@@ -113,14 +144,21 @@ export function RenameDialog({
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-black/50 backdrop-blur-[2px]" />
 
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border border-zinc-200 bg-white p-6 shadow-2xl outline-none dark:border-zinc-800 dark:bg-zinc-900">
+        <Dialog.Content
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            inputRef.current?.focus();
+            inputRef.current?.select();
+          }}
+          className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border border-zinc-200 bg-white p-6 shadow-2xl outline-none dark:border-zinc-800 dark:bg-zinc-900"
+        >
           <div className="flex items-start justify-between gap-4">
-            <div>
+            <div className="min-w-0 flex-1">
               <Dialog.Title className="text-lg font-semibold text-zinc-950 dark:text-zinc-50">
                 Rename {resourceLabel}
               </Dialog.Title>
 
-              <Dialog.Description className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+              <Dialog.Description className="mt-1 [overflow-wrap:anywhere] text-sm text-zinc-500 dark:text-zinc-400">
                 Enter a new name for “{currentName}”.
               </Dialog.Description>
             </div>
@@ -130,7 +168,7 @@ export function RenameDialog({
                 type="button"
                 aria-label="Close"
                 disabled={isPending}
-                className="rounded-md p-1 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 disabled:opacity-50 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                className="shrink-0 rounded-md p-1 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 disabled:opacity-50 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
               >
                 <X className="size-5" />
               </button>
@@ -145,19 +183,41 @@ export function RenameDialog({
               Name
             </label>
 
-            <input
-              id={inputId}
-              autoFocus
-              autoComplete="off"
-              aria-invalid={Boolean(errors.name)}
-              {...register('name')}
-              className="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm text-zinc-950 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
-            />
+            <div className="mt-2 flex w-full items-center rounded-lg border border-zinc-300 bg-white focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20 dark:border-zinc-700 dark:bg-zinc-950">
+              <input
+                id={inputId}
+                autoFocus
+                autoComplete="off"
+                maxLength={120 - (fixedSuffix?.length ?? 0)}
+                aria-invalid={Boolean(errors.name)}
+                {...nameField}
+                ref={(element) => {
+                  nameField.ref(element);
+                  inputRef.current = element;
+                }}
+                className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm text-zinc-950 outline-none dark:text-zinc-50"
+              />
+              {fixedSuffix ? (
+                <span className="shrink-0 border-l border-zinc-200 px-3 py-2.5 text-sm text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+                  {fixedSuffix}
+                </span>
+              ) : null}
+            </div>
 
             {errors.name ? (
               <p className="mt-2 text-sm text-red-600 dark:text-red-400">
                 {errors.name.message}
               </p>
+            ) : null}
+
+            {conflictMessage ? (
+              <div
+                role="alert"
+                className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900 dark:border-amber-900/70 dark:bg-amber-950/40 dark:text-amber-200"
+              >
+                <p className="font-medium">Name already in use</p>
+                <p className="mt-1">{conflictMessage}</p>
+              </div>
             ) : null}
 
             {errors.root ? (

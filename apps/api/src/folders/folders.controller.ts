@@ -6,6 +6,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   Delete,
   HttpCode,
   HttpStatus,
@@ -13,6 +14,7 @@ import {
 import type { Folder, User } from '@prisma/client';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { CreateFolderDto } from './dto/create-folder.dto';
+import { ListFoldersQueryDto } from './dto/list-folders-query.dto';
 import { UpdateFolderDto } from './dto/update-folder.dto';
 import { FoldersService } from './folders.service';
 
@@ -53,6 +55,27 @@ export class FoldersController {
 
     return {
       data: serializeFolder(folder),
+    };
+  }
+
+  @Get('data-rooms/:dataRoomId/folders')
+  async listDestinations(
+    @CurrentUser() user: User,
+    @Param('dataRoomId', new ParseUUIDPipe()) dataRoomId: string,
+    @Query() query: ListFoldersQueryDto,
+  ) {
+    const result = await this.folders.listDestinations(
+      user.id,
+      dataRoomId,
+      query,
+    );
+
+    return {
+      data: result.items.map(serializeFolder),
+      page: {
+        hasMore: result.hasMore,
+        nextCursor: result.nextCursor,
+      },
     };
   }
 

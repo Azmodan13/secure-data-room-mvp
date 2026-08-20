@@ -43,6 +43,16 @@ export type FileViewUrlResponse = {
   data: FileViewUrl;
 };
 
+export type FilesResponse = {
+  data: FileDetails[];
+};
+
+export type BulkMoveConflict = {
+  fileId: string;
+  currentName: string;
+  suggestedName: string;
+};
+
 export type UploadQueueStatus =
   | 'queued'
   | 'requesting'
