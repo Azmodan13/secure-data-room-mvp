@@ -10,7 +10,10 @@ import { createHash, randomUUID } from 'node:crypto';
 import { AccessPolicyService } from '../access-policy/access-policy.service';
 import { normalizeName } from '../common/names/normalize-name';
 import { PrismaService } from '../prisma/prisma.service';
-import { StorageService } from '../storage/storage.service';
+import {
+  SIGNED_VIEW_URL_TTL_SECONDS,
+  StorageService,
+} from '../storage/storage.service';
 import type { ConfirmUploadDto } from './dto/confirm-upload.dto';
 import {
   MAX_UPLOAD_BYTES,
@@ -27,6 +30,11 @@ export type UploadIntent = {
   uploadId: string;
   uploadUrl: string;
   displayName: string;
+};
+
+export type FileViewUrl = {
+  url: string;
+  expiresAt: string;
 };
 
 @Injectable()
@@ -138,6 +146,41 @@ export class FilesService {
     if (!committed) {
       await this.storage.removeObjects([storageKey]);
     }
+  }
+
+  async getFile(userId: string, fileId: string): Promise<FileRecord> {
+    await this.accessPolicy.assertCanRead(userId, {
+      type: 'file',
+      id: fileId,
+    });
+
+    const file = await this.prisma.fileRecord.findFirst({
+      where: {
+        id: fileId,
+        uploadStatus: UploadStatus.READY,
+      },
+    });
+
+    if (!file) {
+      throw new NotFoundException('Resource is not available.');
+    }
+
+    return file;
+  }
+
+  async getViewUrl(userId: string, fileId: string): Promise<FileViewUrl> {
+    const file = await this.getFile(userId, fileId);
+
+    if (!(await this.storage.objectExists(file.storageKey))) {
+      throw new NotFoundException('This PDF is no longer available.');
+    }
+
+    return {
+      url: await this.storage.createSignedViewUrl(file.storageKey),
+      expiresAt: new Date(
+        Date.now() + SIGNED_VIEW_URL_TTL_SECONDS * 1000,
+      ).toISOString(),
+    };
   }
 
   private async assertDestination(

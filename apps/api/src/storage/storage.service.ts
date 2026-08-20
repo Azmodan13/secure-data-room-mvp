@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 const DELETE_BATCH_SIZE = 100;
+export const SIGNED_VIEW_URL_TTL_SECONDS = 300;
 
 type StorageDatabase = {
   public: {
@@ -80,6 +81,34 @@ export class StorageService {
     }
 
     return Buffer.from(await data.arrayBuffer());
+  }
+
+  async objectExists(storageKey: string): Promise<boolean> {
+    const { data, error } = await this.client.storage
+      .from(this.bucket)
+      .exists(storageKey);
+
+    if (error) {
+      throw new ServiceUnavailableException(
+        'Unable to verify that the stored file is available.',
+      );
+    }
+
+    return data;
+  }
+
+  async createSignedViewUrl(storageKey: string): Promise<string> {
+    const { data, error } = await this.client.storage
+      .from(this.bucket)
+      .createSignedUrl(storageKey, SIGNED_VIEW_URL_TTL_SECONDS);
+
+    if (error) {
+      throw new ServiceUnavailableException(
+        'Unable to authorize access to the stored file.',
+      );
+    }
+
+    return data.signedUrl;
   }
 
   async removeObjects(storageKeys: string[]): Promise<void> {

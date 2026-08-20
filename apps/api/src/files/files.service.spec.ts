@@ -25,6 +25,7 @@ type PrismaMock = {
 };
 
 type PolicyMock = {
+  assertCanRead: jest.Mock;
   assertCanMutate: jest.Mock;
 };
 
@@ -32,6 +33,8 @@ type StorageMock = {
   createSignedUploadUrl: jest.Mock;
   getObjectInfo: jest.Mock;
   downloadObject: jest.Mock;
+  objectExists: jest.Mock;
+  createSignedViewUrl: jest.Mock;
   removeObjects: jest.Mock;
 };
 
@@ -50,11 +53,16 @@ describe('FilesService', () => {
         create: jest.fn(),
       },
     };
-    policy = { assertCanMutate: jest.fn().mockResolvedValue(undefined) };
+    policy = {
+      assertCanRead: jest.fn().mockResolvedValue(undefined),
+      assertCanMutate: jest.fn().mockResolvedValue(undefined),
+    };
     storage = {
       createSignedUploadUrl: jest.fn(),
       getObjectInfo: jest.fn(),
       downloadObject: jest.fn(),
+      objectExists: jest.fn(),
+      createSignedViewUrl: jest.fn(),
       removeObjects: jest.fn().mockResolvedValue(undefined),
     };
 
@@ -226,6 +234,50 @@ describe('FilesService', () => {
     expect(storage.removeObjects).toHaveBeenCalledWith([
       `rooms/${dataRoomId}/${uploadId}`,
     ]);
+  });
+
+  it('returns READY file metadata after checking read access', async () => {
+    const file = fileRecord();
+    prisma.fileRecord.findFirst.mockResolvedValue(file);
+
+    await expect(service.getFile(ownerId, file.id)).resolves.toBe(file);
+
+    expect(policy.assertCanRead).toHaveBeenCalledWith(ownerId, {
+      type: 'file',
+      id: file.id,
+    });
+    expect(prisma.fileRecord.findFirst).toHaveBeenCalledWith({
+      where: { id: file.id, uploadStatus: UploadStatus.READY },
+    });
+  });
+
+  it('creates a short-lived view URL only for an available object', async () => {
+    const file = fileRecord();
+    prisma.fileRecord.findFirst.mockResolvedValue(file);
+    storage.objectExists.mockResolvedValue(true);
+    storage.createSignedViewUrl.mockResolvedValue('https://storage.test/pdf');
+
+    const before = Date.now();
+    const result = await service.getViewUrl(ownerId, file.id);
+
+    expect(result.url).toBe('https://storage.test/pdf');
+    expect(new Date(result.expiresAt).getTime()).toBeGreaterThanOrEqual(
+      before + 300_000,
+    );
+    expect(storage.objectExists).toHaveBeenCalledWith(file.storageKey);
+    expect(storage.createSignedViewUrl).toHaveBeenCalledWith(file.storageKey);
+  });
+
+  it('does not issue a view URL when the stored object is missing', async () => {
+    const file = fileRecord();
+    prisma.fileRecord.findFirst.mockResolvedValue(file);
+    storage.objectExists.mockResolvedValue(false);
+
+    await expect(service.getViewUrl(ownerId, file.id)).rejects.toThrow(
+      'This PDF is no longer available.',
+    );
+
+    expect(storage.createSignedViewUrl).not.toHaveBeenCalled();
   });
 });
 

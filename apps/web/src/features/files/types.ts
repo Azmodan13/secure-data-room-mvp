@@ -28,6 +28,21 @@ export type ConfirmedFileResponse = {
   data: ConfirmedFile;
 };
 
+export type FileDetails = ConfirmedFile;
+
+export type FileDetailsResponse = {
+  data: FileDetails;
+};
+
+export type FileViewUrl = {
+  url: string;
+  expiresAt: string;
+};
+
+export type FileViewUrlResponse = {
+  data: FileViewUrl;
+};
+
 export type UploadQueueStatus =
   | 'queued'
   | 'requesting'
