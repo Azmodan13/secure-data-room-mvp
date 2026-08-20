@@ -2,9 +2,27 @@ import { apiFetch } from '@/lib/api/client';
 import type {
   ConfirmedFile,
   ConfirmedFileResponse,
+  FileDetails,
+  FileDetailsResponse,
+  FileViewUrl,
+  FileViewUrlResponse,
   UploadIntent,
   UploadIntentResponse,
 } from './types';
+
+export async function getFile(fileId: string): Promise<FileDetails> {
+  const response = await apiFetch<FileDetailsResponse>(`/files/${fileId}`);
+
+  return response.data;
+}
+
+export async function getFileViewUrl(fileId: string): Promise<FileViewUrl> {
+  const response = await apiFetch<FileViewUrlResponse>(
+    `/files/${fileId}/view-url`,
+  );
+
+  return response.data;
+}
 
 type UploadDescriptor = {
   clientId: string;

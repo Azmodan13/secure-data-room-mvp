@@ -46,7 +46,10 @@ function formatFileSize(sizeBytes: string): string {
 
 function FileRow({ file }: { file: FileItem }) {
   return (
-    <div className="flex items-center gap-3 rounded-lg px-3 py-3">
+    <Link
+      href={`/rooms/${file.dataRoomId}/files/${file.id}`}
+      className="flex items-center gap-3 rounded-lg px-3 py-3 transition-colors hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 dark:hover:bg-zinc-800/70"
+    >
       <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-300">
         <FileText className="size-5" />
       </div>
@@ -60,7 +63,7 @@ function FileRow({ file }: { file: FileItem }) {
           {formatFileSize(file.sizeBytes)}
         </p>
       </div>
-    </div>
+    </Link>
   );
 }
 
