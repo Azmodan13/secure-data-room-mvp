@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -7,8 +8,10 @@ import { Prisma, UploadStatus } from '@prisma/client';
 import { createHash, randomBytes } from 'node:crypto';
 import { AccessPolicyService } from '../access-policy/access-policy.service';
 import type { ResourceTarget } from '../access-policy/resource-target.type';
+import { decodeCursor, encodeCursor } from '../common/pagination/cursor';
 import { PrismaService } from '../prisma/prisma.service';
 import type { CreateShareGrantDto } from './dto/create-share-grant.dto';
+import type { ListOwnedAccessQueryDto } from './dto/list-owned-access-query.dto';
 import type { ResourceTargetDto } from './dto/resource-target.dto';
 
 const PAGE_SIZE = 50;
@@ -74,6 +77,176 @@ export class SharingService {
     return { publicLinks, grants };
   }
 
+  async listOwnedPublicLinks(ownerId: string, query: ListOwnedAccessQueryDto) {
+    const cursor = query.cursor ? decodeCursor(query.cursor) : null;
+    const links = await this.prisma.publicLink.findMany({
+      where: {
+        revokedAt: null,
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+        AND: [
+          {
+            OR: [
+              { dataRoom: { ownerId } },
+              { folder: { dataRoom: { ownerId } } },
+              { file: { dataRoom: { ownerId } } },
+            ],
+          },
+          ...(cursor
+            ? [
+                {
+                  OR: [
+                    { createdAt: { lt: cursor.createdAt } },
+                    { createdAt: cursor.createdAt, id: { lt: cursor.id } },
+                  ],
+                },
+              ]
+            : []),
+        ],
+      },
+      select: {
+        id: true,
+        expiresAt: true,
+        createdAt: true,
+        dataRoom: { select: { id: true, name: true } },
+        folder: {
+          select: {
+            id: true,
+            name: true,
+            dataRoom: { select: { id: true, name: true } },
+          },
+        },
+        file: {
+          select: {
+            id: true,
+            name: true,
+            folderId: true,
+            dataRoom: { select: { id: true, name: true } },
+          },
+        },
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: query.limit + 1,
+    });
+
+    const hasMore = links.length > query.limit;
+    const page = hasMore ? links.slice(0, query.limit) : links;
+    const items = page.map((link) => {
+      const target = link.dataRoom ?? link.folder ?? link.file;
+      const dataRoom =
+        link.dataRoom ?? link.folder?.dataRoom ?? link.file?.dataRoom;
+      if (!target || !dataRoom) this.throwUnavailable();
+
+      return {
+        id: link.id,
+        targetType: link.dataRoom
+          ? ('dataRoom' as const)
+          : link.folder
+            ? ('folder' as const)
+            : ('file' as const),
+        targetId: target.id,
+        targetName: target.name,
+        dataRoom,
+        folderId: link.file?.folderId ?? null,
+        expiresAt: link.expiresAt,
+        createdAt: link.createdAt,
+      };
+    });
+    const lastItem = page.at(-1);
+
+    return {
+      items,
+      hasMore,
+      nextCursor:
+        hasMore && lastItem
+          ? encodeCursor({ id: lastItem.id, createdAt: lastItem.createdAt })
+          : null,
+    };
+  }
+
+  async listOwnedGrants(ownerId: string, query: ListOwnedAccessQueryDto) {
+    const cursor = query.cursor ? decodeCursor(query.cursor) : null;
+    const grants = await this.prisma.shareGrant.findMany({
+      where: {
+        revokedAt: null,
+        AND: [
+          {
+            OR: [
+              { dataRoom: { ownerId } },
+              { folder: { dataRoom: { ownerId } } },
+              { file: { dataRoom: { ownerId } } },
+            ],
+          },
+          ...(cursor
+            ? [
+                {
+                  OR: [
+                    { createdAt: { lt: cursor.createdAt } },
+                    { createdAt: cursor.createdAt, id: { lt: cursor.id } },
+                  ],
+                },
+              ]
+            : []),
+        ],
+      },
+      select: {
+        id: true,
+        recipientEmail: true,
+        role: true,
+        createdAt: true,
+        dataRoom: { select: { id: true, name: true } },
+        folder: {
+          select: {
+            id: true,
+            name: true,
+            dataRoom: { select: { id: true, name: true } },
+          },
+        },
+        file: {
+          select: {
+            id: true,
+            name: true,
+            folderId: true,
+            dataRoom: { select: { id: true, name: true } },
+          },
+        },
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: query.limit + 1,
+    });
+    const hasMore = grants.length > query.limit;
+    const page = hasMore ? grants.slice(0, query.limit) : grants;
+    const items = page.map((grant) => {
+      const target = grant.dataRoom ?? grant.folder ?? grant.file;
+      const dataRoom =
+        grant.dataRoom ?? grant.folder?.dataRoom ?? grant.file?.dataRoom;
+      if (!target || !dataRoom) this.throwUnavailable();
+      return {
+        id: grant.id,
+        targetType: grant.dataRoom
+          ? ('dataRoom' as const)
+          : grant.folder
+            ? ('folder' as const)
+            : ('file' as const),
+        targetId: target.id,
+        targetName: target.name,
+        dataRoom,
+        folderId: grant.file?.folderId ?? null,
+        recipientEmail: grant.recipientEmail,
+        role: grant.role,
+        createdAt: grant.createdAt,
+      };
+    });
+    const last = page.at(-1);
+    return {
+      items,
+      hasMore,
+      nextCursor:
+        hasMore && last
+          ? encodeCursor({ id: last.id, createdAt: last.createdAt })
+          : null,
+    };
+  }
+
   async revokePublicLink(ownerId: string, id: string): Promise<void> {
     const link = await this.prisma.publicLink.findUnique({ where: { id } });
     if (!link) this.throwUnavailable();
@@ -97,22 +270,51 @@ export class SharingService {
       throw new BadRequestException('You already own this resource.');
     }
 
+    const inherited = await this.accessPolicy.findInheritedGrant(
+      recipient.id,
+      target,
+    );
+    if (inherited) {
+      const source =
+        inherited.targetType === 'dataRoom' ? 'Data Room' : 'folder';
+      throw new ConflictException({
+        error: {
+          code: 'ACCESS_ALREADY_INHERITED',
+          message: `This user already has access through the ${source} “${inherited.targetName}”.`,
+          details: inherited,
+        },
+      });
+    }
+
     const where = {
       ...this.exactTargetWhere(target),
       recipientEmail: email,
       revokedAt: null,
     };
     const existing = await this.prisma.shareGrant.findFirst({ where });
-    if (existing) return existing;
+    if (existing) {
+      await this.revokeRedundantDescendantGrants(
+        recipient.id,
+        target,
+        existing.id,
+      );
+      return existing;
+    }
 
     try {
-      return await this.prisma.shareGrant.create({
+      const created = await this.prisma.shareGrant.create({
         data: {
           ...this.targetForeignKeys(target),
           recipientEmail: email,
           recipientUserId: recipient.id,
         },
       });
+      await this.revokeRedundantDescendantGrants(
+        recipient.id,
+        target,
+        created.id,
+      );
+      return created;
     } catch (error) {
       if (this.isUniqueConflict(error)) {
         const raced = await this.prisma.shareGrant.findFirst({ where });
@@ -120,6 +322,54 @@ export class SharingService {
       }
       throw error;
     }
+  }
+
+  private async revokeRedundantDescendantGrants(
+    recipientUserId: string,
+    target: ResourceTarget,
+    keepGrantId: string,
+  ): Promise<void> {
+    if (target.type === 'file') return;
+    if (target.type === 'dataRoom') {
+      await this.prisma.shareGrant.updateMany({
+        where: {
+          recipientUserId,
+          revokedAt: null,
+          id: { not: keepGrantId },
+          OR: [
+            { folder: { dataRoomId: target.id } },
+            { file: { dataRoomId: target.id } },
+          ],
+        },
+        data: { revokedAt: new Date() },
+      });
+      return;
+    }
+
+    const descendants = await this.prisma.$queryRaw<Array<{ id: string }>>(
+      Prisma.sql`
+        WITH RECURSIVE folder_subtree AS (
+          SELECT "id" FROM "folders" WHERE "id" = CAST(${target.id} AS UUID)
+          UNION ALL
+          SELECT child."id" FROM "folders" AS child
+          INNER JOIN folder_subtree AS parent ON child."parent_id" = parent."id"
+        )
+        SELECT "id" FROM folder_subtree
+      `,
+    );
+    const folderIds = descendants.map((folder) => folder.id);
+    await this.prisma.shareGrant.updateMany({
+      where: {
+        recipientUserId,
+        revokedAt: null,
+        id: { not: keepGrantId },
+        OR: [
+          { folderId: { in: folderIds } },
+          { file: { folderId: { in: folderIds } } },
+        ],
+      },
+      data: { revokedAt: new Date() },
+    });
   }
 
   async revokeGrant(ownerId: string, id: string): Promise<void> {

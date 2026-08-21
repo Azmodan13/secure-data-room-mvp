@@ -13,6 +13,7 @@ import {
 import type { User } from '@prisma/client';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { CreateShareGrantDto } from './dto/create-share-grant.dto';
+import { ListOwnedAccessQueryDto } from './dto/list-owned-access-query.dto';
 import { ResourceTargetDto } from './dto/resource-target.dto';
 import { SharingService } from './sharing.service';
 
@@ -26,6 +27,22 @@ export class SharingController {
     @Body() dto: ResourceTargetDto,
   ) {
     return { data: await this.sharing.createPublicLink(user.id, dto) };
+  }
+
+  @Get('public-links')
+  async listOwnedPublicLinks(
+    @CurrentUser() user: User,
+    @Query() query: ListOwnedAccessQueryDto,
+  ) {
+    return { data: await this.sharing.listOwnedPublicLinks(user.id, query) };
+  }
+
+  @Get('grants')
+  async listOwnedGrants(
+    @CurrentUser() user: User,
+    @Query() query: ListOwnedAccessQueryDto,
+  ) {
+    return { data: await this.sharing.listOwnedGrants(user.id, query) };
   }
 
   @Delete('public-links/:id')

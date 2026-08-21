@@ -5,7 +5,27 @@ import type {
   ShareTarget,
   TargetShares,
   ReceivedShare,
+  OwnedPublicLinksPage,
+  OwnedShareGrantsPage,
 } from './types';
+
+export async function getOwnedPublicLinks(cursor: string | null) {
+  const params = new URLSearchParams({ limit: '50' });
+  if (cursor) params.set('cursor', cursor);
+  const response = await apiFetch<{ data: OwnedPublicLinksPage }>(
+    `/shares/public-links?${params.toString()}`,
+  );
+  return response.data;
+}
+
+export async function getOwnedShareGrants(cursor: string | null) {
+  const params = new URLSearchParams({ limit: '50' });
+  if (cursor) params.set('cursor', cursor);
+  const response = await apiFetch<{ data: OwnedShareGrantsPage }>(
+    `/shares/grants?${params.toString()}`,
+  );
+  return response.data;
+}
 
 export async function getTargetShares(target: ShareTarget) {
   const params = new URLSearchParams({

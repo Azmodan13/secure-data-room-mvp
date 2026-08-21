@@ -20,6 +20,7 @@ describe('SharingService', () => {
   let publicFindUnique: AsyncMock;
   let publicRevokeMany: AsyncMock;
   let requireRegisteredRecipient: AsyncMock;
+  let findInheritedGrant: AsyncMock;
   let grantFindFirst: AsyncMock;
   let grantFindMany: AsyncMock;
   let grantFindUnique: AsyncMock;
@@ -28,6 +29,7 @@ describe('SharingService', () => {
   let folderFindUnique: AsyncMock;
   let folderFindMany: AsyncMock;
   let fileFindMany: AsyncMock;
+  let queryRaw: AsyncMock;
 
   beforeEach(() => {
     assertCanMutate = jest.fn();
@@ -42,6 +44,7 @@ describe('SharingService', () => {
     publicFindUnique = jest.fn();
     publicRevokeMany = jest.fn();
     requireRegisteredRecipient = jest.fn();
+    findInheritedGrant = jest.fn().mockResolvedValue(null);
     grantFindFirst = jest.fn();
     grantFindMany = jest.fn();
     grantFindUnique = jest.fn();
@@ -50,6 +53,7 @@ describe('SharingService', () => {
     folderFindUnique = jest.fn();
     folderFindMany = jest.fn();
     fileFindMany = jest.fn();
+    queryRaw = jest.fn().mockResolvedValue([]);
 
     const transaction = jest.fn((callback: (tx: unknown) => unknown) =>
       Promise.resolve(
@@ -74,12 +78,14 @@ describe('SharingService', () => {
       },
       folder: { findUnique: folderFindUnique, findMany: folderFindMany },
       fileRecord: { findMany: fileFindMany },
+      $queryRaw: queryRaw,
       $transaction: transaction,
     } as unknown as PrismaService;
     const accessPolicy = {
       assertCanMutate,
       assertCanReadPublic,
       requireRegisteredRecipient,
+      findInheritedGrant,
     } as unknown as AccessPolicyService;
     service = new SharingService(prisma, accessPolicy);
   });
@@ -129,6 +135,27 @@ describe('SharingService', () => {
     });
   });
 
+  it('revokes narrower grants after granting access to a Data Room', async () => {
+    requireRegisteredRecipient.mockResolvedValue({ id: 'recipient-1' });
+    grantFindFirst.mockResolvedValue(null);
+    grantCreate.mockResolvedValue({ id: 'grant-room' });
+
+    await service.createGrant('owner-1', {
+      targetType: 'dataRoom',
+      targetId: '10000000-0000-4000-8000-000000000001',
+      email: 'viewer@example.com',
+    });
+
+    expect(grantUpdateMany).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        recipientUserId: 'recipient-1',
+        id: { not: 'grant-room' },
+        revokedAt: null,
+      }) as object,
+      data: { revokedAt: expect.any(Date) as Date },
+    });
+  });
+
   it('rejects a grant for an unregistered email', async () => {
     requireRegisteredRecipient.mockRejectedValue(
       new UnprocessableEntityException(
@@ -143,6 +170,30 @@ describe('SharingService', () => {
         email: 'guest@example.com',
       }),
     ).rejects.toBeInstanceOf(UnprocessableEntityException);
+    expect(grantCreate).not.toHaveBeenCalled();
+  });
+
+  it('rejects a redundant file grant when folder access is inherited', async () => {
+    requireRegisteredRecipient.mockResolvedValue({ id: 'recipient-1' });
+    findInheritedGrant.mockResolvedValue({
+      targetType: 'folder',
+      targetName: 'Legal',
+    });
+
+    await expect(
+      service.createGrant('owner-1', {
+        targetType: 'file',
+        targetId: '10000000-0000-4000-8000-000000000002',
+        email: 'viewer@example.com',
+      }),
+    ).rejects.toMatchObject({
+      response: {
+        error: {
+          code: 'ACCESS_ALREADY_INHERITED',
+          message: 'This user already has access through the folder “Legal”.',
+        },
+      },
+    });
     expect(grantCreate).not.toHaveBeenCalled();
   });
 
@@ -198,6 +249,141 @@ describe('SharingService', () => {
       type: 'dataRoom',
       id: '10000000-0000-4000-8000-000000000003',
     });
+  });
+
+  it('lists only safe public-link metadata for resources owned by the caller', async () => {
+    publicFindMany.mockResolvedValue([
+      {
+        id: '10000000-0000-4000-8000-000000000011',
+        expiresAt: null,
+        createdAt: new Date('2026-08-21T10:00:00Z'),
+        dataRoom: null,
+        folder: {
+          id: 'folder-1',
+          name: 'Legal',
+          dataRoom: { id: 'room-1', name: 'Acquisition' },
+        },
+        file: null,
+      },
+    ]);
+
+    const result = await service.listOwnedPublicLinks('owner-1', {
+      limit: 50,
+    });
+
+    expect(result).toEqual({
+      items: [
+        {
+          id: '10000000-0000-4000-8000-000000000011',
+          targetType: 'folder',
+          targetId: 'folder-1',
+          targetName: 'Legal',
+          dataRoom: { id: 'room-1', name: 'Acquisition' },
+          folderId: null,
+          expiresAt: null,
+          createdAt: new Date('2026-08-21T10:00:00Z'),
+        },
+      ],
+      hasMore: false,
+      nextCursor: null,
+    });
+
+    const query = publicFindMany.mock.calls[0]?.[0] as {
+      where: unknown;
+      select: Record<string, unknown>;
+      take: number;
+    };
+    expect(query.where).toEqual(
+      expect.objectContaining({
+        revokedAt: null,
+        AND: expect.arrayContaining([
+          {
+            OR: [
+              { dataRoom: { ownerId: 'owner-1' } },
+              { folder: { dataRoom: { ownerId: 'owner-1' } } },
+              { file: { dataRoom: { ownerId: 'owner-1' } } },
+            ],
+          },
+        ]) as unknown[],
+      }),
+    );
+    expect(query.select).not.toHaveProperty('tokenHash');
+    expect(query.take).toBe(51);
+  });
+
+  it('returns a cursor when more owned public links exist', async () => {
+    publicFindMany.mockResolvedValue([
+      {
+        id: '10000000-0000-4000-8000-000000000021',
+        expiresAt: null,
+        createdAt: new Date('2026-08-21T11:00:00Z'),
+        dataRoom: { id: 'room-1', name: 'Room' },
+        folder: null,
+        file: null,
+      },
+      {
+        id: '10000000-0000-4000-8000-000000000022',
+        expiresAt: null,
+        createdAt: new Date('2026-08-21T10:00:00Z'),
+        dataRoom: { id: 'room-2', name: 'Next page' },
+        folder: null,
+        file: null,
+      },
+    ]);
+
+    const result = await service.listOwnedPublicLinks('owner-1', { limit: 1 });
+
+    expect(result.items).toHaveLength(1);
+    expect(result.hasMore).toBe(true);
+    expect(result.nextCursor).toEqual(expect.any(String));
+  });
+
+  it('lists safe permissioned grants only across resources owned by the caller', async () => {
+    grantFindMany.mockResolvedValue([
+      {
+        id: '10000000-0000-4000-8000-000000000031',
+        recipientEmail: 'viewer@example.com',
+        role: 'VIEWER',
+        createdAt: new Date('2026-08-21T12:00:00Z'),
+        dataRoom: null,
+        folder: null,
+        file: {
+          id: 'file-1',
+          name: 'Report.pdf',
+          folderId: 'folder-1',
+          dataRoom: { id: 'room-1', name: 'Acquisition' },
+        },
+      },
+    ]);
+
+    const result = await service.listOwnedGrants('owner-1', { limit: 50 });
+
+    expect(result.items[0]).toEqual(
+      expect.objectContaining({
+        targetType: 'file',
+        targetName: 'Report.pdf',
+        recipientEmail: 'viewer@example.com',
+      }),
+    );
+    const query = grantFindMany.mock.calls.at(-1)?.[0] as {
+      where: unknown;
+      select: Record<string, unknown>;
+    };
+    expect(query.where).toEqual(
+      expect.objectContaining({
+        revokedAt: null,
+        AND: expect.arrayContaining([
+          {
+            OR: [
+              { dataRoom: { ownerId: 'owner-1' } },
+              { folder: { dataRoom: { ownerId: 'owner-1' } } },
+              { file: { dataRoom: { ownerId: 'owner-1' } } },
+            ],
+          },
+        ]) as unknown[],
+      }),
+    );
+    expect(query.select).not.toHaveProperty('recipientUserId');
   });
 
   it('authorizes the link target before revoking public access', async () => {

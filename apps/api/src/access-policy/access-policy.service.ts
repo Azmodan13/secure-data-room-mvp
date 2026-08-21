@@ -18,6 +18,11 @@ type FolderAncestorRow = {
   id: string;
 };
 
+export type CoveringGrant = {
+  targetType: 'dataRoom' | 'folder';
+  targetName: string;
+};
+
 @Injectable()
 export class AccessPolicyService {
   constructor(private readonly prisma: PrismaService) {}
@@ -145,6 +150,35 @@ export class AccessPolicyService {
     }
 
     return recipient;
+  }
+
+  async findInheritedGrant(
+    recipientUserId: string,
+    target: ResourceTarget,
+  ): Promise<CoveringGrant | null> {
+    if (target.type === 'dataRoom') return null;
+    const context = await this.resolveResourceContext(target);
+    const coveredTargets: Prisma.ShareGrantWhereInput[] = [
+      { dataRoomId: context.dataRoomId },
+    ];
+    const ancestorIds =
+      target.type === 'folder'
+        ? context.folderAncestorIds.filter((id) => id !== target.id)
+        : context.folderAncestorIds;
+    if (ancestorIds.length)
+      coveredTargets.push({ folderId: { in: ancestorIds } });
+
+    const grant = await this.prisma.shareGrant.findFirst({
+      where: { recipientUserId, revokedAt: null, OR: coveredTargets },
+      select: {
+        dataRoom: { select: { name: true } },
+        folder: { select: { name: true } },
+      },
+    });
+    if (!grant) return null;
+    return grant.dataRoom
+      ? { targetType: 'dataRoom', targetName: grant.dataRoom.name }
+      : { targetType: 'folder', targetName: grant.folder!.name };
   }
 
   private async resolveResourceContext(

@@ -12,6 +12,34 @@ export type PublicLink = {
   createdAt: string;
 };
 
+export type OwnedPublicLink = {
+  id: string;
+  targetType: ShareTargetType;
+  targetId: string;
+  targetName: string;
+  dataRoom: { id: string; name: string };
+  folderId: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+};
+
+export type OwnedPublicLinksPage = {
+  items: OwnedPublicLink[];
+  hasMore: boolean;
+  nextCursor: string | null;
+};
+
+export type OwnedShareGrant = Omit<OwnedPublicLink, 'expiresAt'> & {
+  recipientEmail: string;
+  role: 'VIEWER';
+};
+
+export type OwnedShareGrantsPage = {
+  items: OwnedShareGrant[];
+  hasMore: boolean;
+  nextCursor: string | null;
+};
+
 export type ShareGrant = {
   id: string;
   recipientEmail: string;

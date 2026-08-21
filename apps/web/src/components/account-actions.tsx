@@ -2,10 +2,12 @@
 
 import { signOut } from '@/app/rooms/actions';
 import { ThemeSwitcher } from './theme-switcher';
+import { PublicLinksDialog } from '@/features/sharing/components/public-links-dialog';
 
 export function AccountActions() {
   return (
     <div className="flex shrink-0 items-center gap-2">
+      <PublicLinksDialog />
       <ThemeSwitcher />
 
       <form action={signOut}>
