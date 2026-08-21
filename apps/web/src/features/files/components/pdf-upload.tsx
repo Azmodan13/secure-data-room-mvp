@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   CircleX,
   FileText,
+  LoaderCircle,
   RefreshCw,
   Upload,
   X,
@@ -42,6 +43,7 @@ type PdfUploadProps = {
   children: ReactNode;
   emptyFolderAction: ReactNode;
   readOnly?: boolean;
+  isRefreshing?: boolean;
 };
 
 export type UploadToFolder = (
@@ -83,6 +85,7 @@ export function PdfUpload({
   children,
   emptyFolderAction,
   readOnly = false,
+  isRefreshing = false,
 }: PdfUploadProps) {
   const queryClient = useQueryClient();
   const [items, setItems] = useState<UploadQueueItem[]>([]);
@@ -508,7 +511,7 @@ export function PdfUpload({
             <input {...getInputProps({ id: inputId })} />
           ) : null}
 
-          <div className="divide-y divide-zinc-100 rounded-xl border border-zinc-200 bg-white p-2 shadow-sm dark:divide-zinc-800 dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="relative overflow-hidden divide-y divide-zinc-100 rounded-xl border border-zinc-200 bg-white p-2 shadow-sm dark:divide-zinc-800 dark:border-zinc-800 dark:bg-zinc-900">
             {items.map((item) => (
               <UploadRow
                 key={item.clientId}
@@ -518,9 +521,19 @@ export function PdfUpload({
                 onRetry={() => retry(item)}
               />
             ))}
-            <FolderUploadContext.Provider value={uploadToFolder}>
-              {children}
-            </FolderUploadContext.Provider>
+            <div className="relative min-w-0 overflow-hidden">
+              <FolderUploadContext.Provider value={uploadToFolder}>
+                {children}
+              </FolderUploadContext.Provider>
+              {isRefreshing ? (
+                <div className="absolute inset-0 z-20 flex min-h-48 items-center justify-center bg-white/75 backdrop-blur-[1px] dark:bg-zinc-950/75">
+                  <div className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-600 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
+                    <LoaderCircle className="size-4 animate-spin" />
+                    Sorting items…
+                  </div>
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
       ) : null}

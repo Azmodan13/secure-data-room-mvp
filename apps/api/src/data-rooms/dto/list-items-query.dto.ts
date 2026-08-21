@@ -1,7 +1,23 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
+import {
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Max,
+  Min,
+} from 'class-validator';
 
 export class ListItemsQueryDto {
+  @IsOptional()
+  @IsIn(['name', 'createdAt', 'size'])
+  sortBy: 'name' | 'createdAt' | 'size' = 'name';
+
+  @IsOptional()
+  @IsIn(['asc', 'desc'])
+  sortOrder: 'asc' | 'desc' = 'asc';
+
   @IsOptional()
   @IsUUID()
   folderId?: string;

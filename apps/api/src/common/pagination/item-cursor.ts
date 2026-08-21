@@ -1,19 +1,20 @@
 import { BadRequestException } from '@nestjs/common';
 
 export type ItemKind = 'folder' | 'file';
+export type ItemSortBy = 'name' | 'createdAt' | 'size';
+export type SortOrder = 'asc' | 'desc';
 
 type ItemCursorPayload = {
-  version: 1;
+  version: 2;
   kind: ItemKind;
-  normalizedName: string;
+  sortBy: ItemSortBy;
+  sortOrder: SortOrder;
+  sortValue: string;
   id: string;
 };
 
-export type ItemCursorPosition = {
-  kind: ItemKind;
+export type ItemCursorPosition = Omit<ItemCursorPayload, 'version'> & {
   kindRank: number;
-  normalizedName: string;
-  id: string;
 };
 
 const UUID_PATTERN =
@@ -22,42 +23,39 @@ const UUID_PATTERN =
 export function encodeItemCursor(
   position: Omit<ItemCursorPosition, 'kindRank'>,
 ): string {
-  const payload: ItemCursorPayload = {
-    version: 1,
-    kind: position.kind,
-    normalizedName: position.normalizedName,
-    id: position.id,
-  };
-
-  return Buffer.from(JSON.stringify(payload)).toString('base64url');
+  return Buffer.from(
+    JSON.stringify({ version: 2, ...position } satisfies ItemCursorPayload),
+  ).toString('base64url');
 }
 
-export function decodeItemCursor(cursor: string): ItemCursorPosition {
+export function decodeItemCursor(
+  cursor: string,
+  expected: { sortBy: ItemSortBy; sortOrder: SortOrder },
+): ItemCursorPosition {
   try {
-    const decoded = Buffer.from(cursor, 'base64url').toString('utf8');
-    const parsed: unknown = JSON.parse(decoded);
-
-    if (typeof parsed !== 'object' || parsed === null) {
+    const parsed: unknown = JSON.parse(
+      Buffer.from(cursor, 'base64url').toString('utf8'),
+    );
+    if (typeof parsed !== 'object' || parsed === null)
       throw new Error('Invalid cursor payload');
-    }
-
-    const payload = parsed as Record<string, unknown>;
-
+    const value = parsed as Record<string, unknown>;
     if (
-      payload.version !== 1 ||
-      (payload.kind !== 'folder' && payload.kind !== 'file') ||
-      typeof payload.normalizedName !== 'string' ||
-      typeof payload.id !== 'string' ||
-      !UUID_PATTERN.test(payload.id)
-    ) {
+      value.version !== 2 ||
+      (value.kind !== 'folder' && value.kind !== 'file') ||
+      value.sortBy !== expected.sortBy ||
+      value.sortOrder !== expected.sortOrder ||
+      typeof value.sortValue !== 'string' ||
+      typeof value.id !== 'string' ||
+      !UUID_PATTERN.test(value.id)
+    )
       throw new Error('Invalid cursor fields');
-    }
-
     return {
-      kind: payload.kind,
-      kindRank: payload.kind === 'folder' ? 0 : 1,
-      normalizedName: payload.normalizedName,
-      id: payload.id,
+      kind: value.kind,
+      kindRank: value.kind === 'folder' ? 0 : 1,
+      sortBy: expected.sortBy,
+      sortOrder: expected.sortOrder,
+      sortValue: value.sortValue,
+      id: value.id,
     };
   } catch {
     throw new BadRequestException('Item pagination cursor is not valid.');
