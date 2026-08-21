@@ -126,7 +126,9 @@ export function FileRow({
             className="size-4 accent-indigo-600"
           />
         </label>
-      ) : null}
+      ) : (
+        <span aria-hidden="true" />
+      )}
       <Link
         href={`/rooms/${file.dataRoomId}/files/${file.id}`}
         draggable={false}
