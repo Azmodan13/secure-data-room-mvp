@@ -1,12 +1,13 @@
 'use client';
 
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { MoreHorizontal, Pencil, Share2, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { DeleteDialog } from '@/components/delete-dialog';
 import { RenameDialog } from '@/components/rename-dialog';
 import type { FolderItem } from '@/features/data-rooms/types';
+import { ShareDialog } from '@/features/sharing/components/share-dialog';
 import { useDeleteFolder, useRenameFolder } from '../mutations';
 import { useFolderDeleteSummary } from '../queries';
 
@@ -18,6 +19,7 @@ type FolderActionsProps = {
 export function FolderActions({ dataRoomId, folder }: FolderActionsProps) {
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
 
   const renameMutation = useRenameFolder({
     dataRoomId,
@@ -58,6 +60,14 @@ export function FolderActions({ dataRoomId, folder }: FolderActionsProps) {
               Rename
             </DropdownMenu.Item>
 
+            <DropdownMenu.Item
+              onSelect={() => setShareOpen(true)}
+              className="flex cursor-default items-center gap-2 rounded-md px-2.5 py-2 text-sm text-zinc-700 outline-none data-[highlighted]:bg-zinc-100 data-[highlighted]:text-zinc-950 dark:text-zinc-200 dark:data-[highlighted]:bg-zinc-800 dark:data-[highlighted]:text-zinc-50"
+            >
+              <Share2 className="size-4" />
+              Share
+            </DropdownMenu.Item>
+
             <DropdownMenu.Separator className="my-1 h-px bg-zinc-200 dark:bg-zinc-700" />
 
             <DropdownMenu.Item
@@ -70,6 +80,16 @@ export function FolderActions({ dataRoomId, folder }: FolderActionsProps) {
           </DropdownMenu.Content>
         </DropdownMenu.Portal>
       </DropdownMenu.Root>
+
+      <ShareDialog
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+        target={{
+          targetType: 'folder',
+          targetId: folder.id,
+          name: folder.name,
+        }}
+      />
 
       <RenameDialog
         open={renameOpen}

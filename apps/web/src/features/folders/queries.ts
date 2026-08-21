@@ -3,12 +3,14 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import {
   getFolderBreadcrumbs,
+  getFolder,
   getFolderDeleteSummary,
   getFolderDestinations,
 } from './api';
 
 export const folderKeys = {
   all: ['folders'] as const,
+  detail: (folderId: string) => [...folderKeys.all, folderId] as const,
   breadcrumbs: (folderId: string | null) =>
     [...folderKeys.all, 'breadcrumbs', folderId] as const,
   deleteSummary: (folderId: string) =>
@@ -16,6 +18,13 @@ export const folderKeys = {
   destinations: (dataRoomId: string, parentId: string | null) =>
     [...folderKeys.all, 'destinations', dataRoomId, { parentId }] as const,
 };
+
+export function useFolder(folderId: string) {
+  return useQuery({
+    queryKey: folderKeys.detail(folderId),
+    queryFn: () => getFolder(folderId),
+  });
+}
 
 export function useFolderDestinations(
   dataRoomId: string,

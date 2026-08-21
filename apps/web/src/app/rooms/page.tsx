@@ -4,6 +4,7 @@ import { getCurrentUser } from '@/lib/api/server';
 import { createClient } from '@/lib/supabase/server';
 import { DataRoomsList } from '@/features/data-rooms/components/data-rooms-list';
 import { CreateDataRoomDialog } from '@/features/data-rooms/components/create-data-room-dialog';
+import { RoomsNavigation } from '@/features/sharing/components/rooms-navigation';
 
 export default async function RoomsPage() {
   const supabase = await createClient();
@@ -44,6 +45,7 @@ export default async function RoomsPage() {
             <AccountActions />
           </div>
         </header>
+        <RoomsNavigation active="owned" />
         <section className="py-6">
           <DataRoomsList />
         </section>

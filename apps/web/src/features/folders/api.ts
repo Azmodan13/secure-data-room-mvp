@@ -53,6 +53,11 @@ export async function getFolderBreadcrumbs(
   return response.data;
 }
 
+export async function getFolder(folderId: string): Promise<Folder> {
+  const response = await apiFetch<FolderResponse>(`/folders/${folderId}`);
+  return response.data;
+}
+
 export async function renameFolder(
   folderId: string,
   name: string,

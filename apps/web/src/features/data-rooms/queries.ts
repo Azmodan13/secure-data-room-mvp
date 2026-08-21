@@ -36,7 +36,11 @@ export function useDataRoom(dataRoomId: string) {
   });
 }
 
-export function useDataRoomItems(dataRoomId: string, folderId: string | null) {
+export function useDataRoomItems(
+  dataRoomId: string,
+  folderId: string | null,
+  enabled = true,
+) {
   return useInfiniteQuery({
     queryKey: dataRoomKeys.items(dataRoomId, folderId),
     queryFn: ({ pageParam }) =>
@@ -44,6 +48,7 @@ export function useDataRoomItems(dataRoomId: string, folderId: string | null) {
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) =>
       lastPage.page.hasMore ? lastPage.page.nextCursor : undefined,
+    enabled,
   });
 }
 

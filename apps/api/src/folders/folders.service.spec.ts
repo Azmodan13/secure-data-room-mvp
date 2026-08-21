@@ -153,3 +153,73 @@ describe('FoldersService deletion', () => {
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 });
+
+describe('FoldersService breadcrumbs', () => {
+  const userId = '10000000-0000-4000-8000-000000000001';
+  const ownerId = '10000000-0000-4000-8000-000000000002';
+  const dataRoomId = '30000000-0000-4000-8000-000000000001';
+  const shareRootId = '20000000-0000-4000-8000-000000000002';
+  const childId = '20000000-0000-4000-8000-000000000003';
+  const rows = [
+    { id: folderId, name: 'Private parent', depth: 2 },
+    { id: shareRootId, name: 'Shared root', depth: 1 },
+    { id: childId, name: 'Child', depth: 0 },
+  ];
+
+  const createService = (resolvedOwnerId: string) => {
+    const assertCanRead: AsyncMock = jest.fn().mockResolvedValue(undefined);
+    const findUnique: AsyncMock = jest.fn().mockResolvedValue({
+      dataRoomId,
+      dataRoom: { ownerId: resolvedOwnerId },
+    });
+    const findMany: AsyncMock = jest.fn().mockResolvedValue([]);
+    const queryRaw: AsyncMock = jest.fn().mockResolvedValue(rows);
+
+    const prisma = {
+      folder: { findUnique },
+      shareGrant: { findMany },
+      $queryRaw: queryRaw,
+    } as unknown as PrismaService;
+    const accessPolicy = {
+      assertCanRead,
+    } as unknown as AccessPolicyService;
+
+    return {
+      service: new FoldersService(prisma, accessPolicy, {} as StorageService),
+      assertCanRead,
+      findMany,
+    };
+  };
+
+  it('returns the complete path to the owner', async () => {
+    const { service, findMany } = createService(userId);
+
+    await expect(service.getBreadcrumbs(userId, childId)).resolves.toEqual(
+      rows.map(({ id, name }) => ({ id, name })),
+    );
+    expect(findMany).not.toHaveBeenCalled();
+  });
+
+  it('returns the complete path to a Data Room recipient', async () => {
+    const { service, findMany } = createService(ownerId);
+    findMany.mockResolvedValue([{ dataRoomId, folderId: null }]);
+
+    await expect(service.getBreadcrumbs(userId, childId)).resolves.toEqual(
+      rows.map(({ id, name }) => ({ id, name })),
+    );
+  });
+
+  it('hides ancestors above a directly shared folder', async () => {
+    const { service, assertCanRead, findMany } = createService(ownerId);
+    findMany.mockResolvedValue([{ dataRoomId: null, folderId: shareRootId }]);
+
+    await expect(service.getBreadcrumbs(userId, childId)).resolves.toEqual([
+      { id: shareRootId, name: 'Shared root' },
+      { id: childId, name: 'Child' },
+    ]);
+    expect(assertCanRead).toHaveBeenCalledWith(userId, {
+      type: 'folder',
+      id: childId,
+    });
+  });
+});

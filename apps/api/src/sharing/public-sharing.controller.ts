@@ -39,4 +39,12 @@ export class PublicSharingController {
       ),
     };
   }
+
+  @Get('folders/:folderId')
+  async getFolder(
+    @Param('token') token: string,
+    @Param('folderId', new ParseUUIDPipe()) folderId: string,
+  ) {
+    return { data: await this.sharing.getPublicFolder(token, folderId) };
+  }
 }
