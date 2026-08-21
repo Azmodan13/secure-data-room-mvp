@@ -281,6 +281,21 @@ Required production configuration:
 - **No email delivery:** access is visible after a registered recipient signs in; outbound invitations are outside the core MVP.
 - **No ZIP bulk download:** selected files can be managed individually; server-side archive generation is a stretch improvement.
 
+## Time spent
+
+Approximately 20 hours, including product and architecture planning, full-stack implementation, automated and manual testing, UX polish, documentation, and production deployment. I intentionally spent beyond the suggested 6–8 hour guideline to deliver a complete, deployed MVP and to explore the edge cases and scaling decisions requested in the brief.
+
+## Next steps
+
+Given more time, I would prioritize:
+
+1. Email invitations, email verification, and pending shares for recipients who have not registered yet.
+2. File versioning with explicit version history and restore behavior for name conflicts.
+3. Data Room-wide search and filtering by file name.
+4. Folder move operations and server-side ZIP generation for bulk downloads.
+5. Background jobs for large deletions, archive generation, aggregate reconciliation, and notification delivery.
+6. Audit logs, rate limiting, observability, and load tests for larger production workloads.
+
 ## AI usage
 
 AI tools, primarily OpenAI Codex, were used as a pair-programming assistant for planning, architecture discussions, implementation drafts, debugging, test generation, documentation, and review checklists. I reviewed the proposed decisions and code, ran the validation commands, manually tested the user flows, and made the final product and architecture choices. No credentials or tokens were committed to the repository or documentation, and generated output was not accepted without local verification.
