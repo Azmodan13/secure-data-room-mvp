@@ -87,13 +87,13 @@ export function SharedFolderBrowser({
 
   const items = itemsQuery.data.pages.flatMap((page) => page.data);
   return (
-    <main className="min-h-screen bg-zinc-50 p-6 dark:bg-zinc-950">
+    <main className="min-h-screen bg-zinc-50 p-4 sm:p-6 dark:bg-zinc-950">
       <div className="mx-auto max-w-6xl">
         <header className="border-b border-zinc-200 pb-5 dark:border-zinc-800">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <Link
               href="/shared"
-              className="inline-flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+              className="inline-flex min-h-11 items-center gap-2 text-sm text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
             >
               <ArrowLeft className="size-4" />
               Shared with me
@@ -104,7 +104,7 @@ export function SharedFolderBrowser({
             <p className="text-xs font-medium uppercase tracking-wide text-indigo-600 dark:text-indigo-300">
               Read-only shared folder
             </p>
-            <h1 className="mt-1 truncate text-3xl font-semibold text-zinc-950 dark:text-zinc-50">
+            <h1 className="mt-1 truncate text-2xl font-semibold text-zinc-950 sm:text-3xl dark:text-zinc-50">
               {rootQuery.data.name}
             </h1>
           </div>
@@ -116,19 +116,19 @@ export function SharedFolderBrowser({
           {crumbs.map((crumb, index) => {
             const current = index === crumbs.length - 1;
             return (
-              <div key={crumb.id} className="flex items-center gap-1">
+              <div key={crumb.id} className="flex shrink-0 items-center gap-1">
                 {index > 0 ? (
                   <ChevronRight className="size-4 text-zinc-400" />
                 ) : null}
                 {current ? (
-                  <span className="font-medium text-zinc-950 dark:text-zinc-50">
+                  <span className="max-w-52 truncate font-medium text-zinc-950 dark:text-zinc-50">
                     {crumb.name}
                   </span>
                 ) : (
                   <button
                     type="button"
                     onClick={() => openCrumb(crumb)}
-                    className="font-medium text-zinc-500 hover:text-zinc-950 dark:text-zinc-400"
+                    className="max-w-52 truncate font-medium text-zinc-500 hover:text-zinc-950 dark:text-zinc-400"
                   >
                     {crumb.name}
                   </button>
@@ -155,7 +155,7 @@ export function SharedFolderBrowser({
               </ul>
             </div>
           ) : (
-            <div className="rounded-xl border border-dashed border-zinc-300 px-6 py-20 text-center dark:border-zinc-700">
+            <div className="rounded-xl border border-dashed border-zinc-300 px-4 py-16 text-center sm:px-6 sm:py-20 dark:border-zinc-700">
               <Folder className="mx-auto size-10 text-zinc-300" />
               <h2 className="mt-4 font-semibold text-zinc-950 dark:text-zinc-50">
                 This folder is empty
@@ -168,7 +168,7 @@ export function SharedFolderBrowser({
                 type="button"
                 onClick={() => void itemsQuery.fetchNextPage()}
                 disabled={itemsQuery.isFetchingNextPage}
-                className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900"
+                className="min-h-11 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900"
               >
                 {itemsQuery.isFetchingNextPage ? 'Loading…' : 'Load more'}
               </button>
@@ -192,7 +192,7 @@ function SharedFolderRow({
       <button
         type="button"
         onClick={onOpen}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
+        className="flex min-h-12 w-full items-center gap-3 px-4 py-3 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
       >
         <Folder className="size-5 text-indigo-500" />
         <span className="min-w-0 flex-1 truncate text-sm font-medium">

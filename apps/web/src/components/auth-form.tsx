@@ -36,40 +36,63 @@ export function AuthForm({ initialError }: { initialError?: string }) {
   const onSubmit = handleSubmit(async (values) => {
     setAuthError('');
 
-    const supabase = createClient();
-    const credentials = {
-      email: values.email.trim().toLowerCase(),
-      password: values.password,
-    };
+    try {
+      const supabase = createClient();
+      const credentials = {
+        email: values.email.trim().toLowerCase(),
+        password: values.password,
+      };
 
-    const result =
-      mode === 'sign-in'
-        ? await supabase.auth.signInWithPassword(credentials)
-        : await supabase.auth.signUp(credentials);
+      const result =
+        mode === 'sign-in'
+          ? await supabase.auth.signInWithPassword(credentials)
+          : await supabase.auth.signUp(credentials);
 
-    if (result.error) {
-      setAuthError(result.error.message);
-      return;
+      if (result.error) {
+        setAuthError(result.error.message);
+        return;
+      }
+
+      router.replace('/rooms');
+      router.refresh();
+    } catch {
+      setAuthError(
+        'Unable to reach the authentication service. Check your connection and try again.',
+      );
     }
-
-    router.replace('/rooms');
-    router.refresh();
   });
 
   async function handleGoogleSignIn() {
     setAuthError('');
     setIsGooglePending(true);
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback?next=/rooms`,
-      },
-    });
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback?next=/rooms`,
+          skipBrowserRedirect: true,
+        },
+      });
 
-    if (error) {
-      setAuthError(error.message);
+      if (error) {
+        setAuthError(error.message);
+        setIsGooglePending(false);
+        return;
+      }
+
+      if (!data.url) {
+        setAuthError('Google sign-in did not return a redirect URL.');
+        setIsGooglePending(false);
+        return;
+      }
+
+      window.location.assign(data.url);
+    } catch {
+      setAuthError(
+        'Unable to start Google sign-in. Check your connection and try again.',
+      );
       setIsGooglePending(false);
     }
   }
@@ -84,7 +107,7 @@ export function AuthForm({ initialError }: { initialError?: string }) {
   const pending = isSubmitting || isGooglePending;
 
   return (
-    <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm sm:p-8 dark:border-zinc-800 dark:bg-zinc-900">
       <div className="mb-8">
         <div className="mb-6 flex size-10 items-center justify-center rounded-xl bg-indigo-600 font-semibold text-white">
           DR

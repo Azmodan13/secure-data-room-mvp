@@ -103,13 +103,17 @@ function FileRow({
         event.dataTransfer.effectAllowed = 'move';
       }}
       className={`group flex items-center rounded-lg transition-colors ${
+        canMutate ? 'cursor-grab active:cursor-grabbing' : ''
+      } ${
         selected
           ? 'bg-indigo-50 dark:bg-indigo-950/40'
           : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/70'
       }`}
     >
       {canMutate ? (
-        <label className={`ml-3 flex size-5 shrink-0 items-center justify-center ${selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100'}`}>
+        <label
+          className={`ml-2 flex size-10 shrink-0 cursor-pointer items-center justify-center sm:ml-3 sm:size-5 ${selected ? 'opacity-100' : 'opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100'}`}
+        >
           <input
             type="checkbox"
             checked={selected}
@@ -150,6 +154,7 @@ type FolderRowProps = {
   folder: FolderItem;
   onOpen: () => void;
   canMutate: boolean;
+  isMoving: boolean;
   onPersistedFilesDrop: (fileIds: string[], folder: FolderItem) => void;
 };
 
@@ -158,6 +163,7 @@ function FolderRow({
   folder,
   onOpen,
   canMutate,
+  isMoving,
   onPersistedFilesDrop,
 }: FolderRowProps) {
   const [isFileOver, setIsFileOver] = useState(false);
@@ -177,6 +183,7 @@ function FolderRow({
   function handleDragOver(event: DragEvent<HTMLDivElement>) {
     if (
       !canMutate ||
+      isMoving ||
       (!acceptsFiles(event) && !acceptsPersistedFiles(event))
     ) {
       return;
@@ -186,16 +193,17 @@ function FolderRow({
     event.dataTransfer.dropEffect = acceptsPersistedFiles(event)
       ? 'move'
       : 'copy';
-    setDragOperation(
-      acceptsPersistedFiles(event) ? 'move' : 'upload',
-    );
+    setDragOperation(acceptsPersistedFiles(event) ? 'move' : 'upload');
     setIsFileOver(true);
   }
 
   function handleDragLeave(event: DragEvent<HTMLDivElement>) {
     const nextTarget = event.relatedTarget;
 
-    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
+    if (
+      nextTarget instanceof Node &&
+      event.currentTarget.contains(nextTarget)
+    ) {
       return;
     }
 
@@ -206,6 +214,7 @@ function FolderRow({
   function handleDrop(event: DragEvent<HTMLDivElement>) {
     if (
       !canMutate ||
+      isMoving ||
       (!acceptsFiles(event) && !acceptsPersistedFiles(event))
     ) {
       return;
@@ -248,14 +257,18 @@ function FolderRow({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       className={`flex items-center rounded-lg transition-colors ${
-        isFileOver
-          ? 'bg-indigo-100 ring-2 ring-inset ring-indigo-500 dark:bg-indigo-950/70'
-          : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/70'
+        isMoving
+          ? 'bg-indigo-50 ring-1 ring-inset ring-indigo-200 dark:bg-indigo-950/40 dark:ring-indigo-900'
+          : isFileOver
+            ? 'bg-indigo-100 ring-2 ring-inset ring-indigo-500 dark:bg-indigo-950/70'
+            : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/70'
       }`}
     >
       <button
         type="button"
         onClick={onOpen}
+        disabled={isMoving}
+        aria-busy={isMoving}
         className="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40"
       >
         <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-300">
@@ -266,7 +279,12 @@ function FolderRow({
           <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
             {folder.name}
           </p>
-          {isFileOver ? (
+          {isMoving ? (
+            <p className="mt-0.5 flex items-center gap-1.5 text-xs text-indigo-700 dark:text-indigo-300">
+              <LoaderCircle className="size-3.5 animate-spin" />
+              Moving files…
+            </p>
+          ) : isFileOver ? (
             <p className="mt-0.5 text-xs text-indigo-700 dark:text-indigo-300">
               {dragOperation === 'move' ? 'Move here' : 'Drop to upload here'}
             </p>
@@ -298,6 +316,7 @@ export function RoomBrowser({
   );
   const [moveOpen, setMoveOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [movingToFolderId, setMovingToFolderId] = useState<string | null>(null);
   const [initialMoveDestination, setInitialMoveDestination] = useState<{
     id: string;
     name: string;
@@ -386,6 +405,8 @@ export function RoomBrowser({
         item.type === 'file' && effectiveIds.includes(item.id),
     );
 
+    setMovingToFolderId(folder.id);
+
     try {
       await bulkMoveMutation.mutateAsync({
         files: filesToMove.map((file) => ({ id: file.id })),
@@ -413,15 +434,17 @@ export function RoomBrowser({
           ? error.message
           : 'Unable to move the selected files.',
       );
+    } finally {
+      setMovingToFolderId(null);
     }
   }
   const uploadInputId = `pdf-upload-${folderId ?? `room-${dataRoomId}`}`;
 
   return (
-    <main className="min-h-screen bg-zinc-50 p-6 dark:bg-zinc-950">
+    <main className="min-h-screen bg-zinc-50 p-4 sm:p-6 dark:bg-zinc-950">
       <div className="mx-auto max-w-6xl">
         <header className="border-b border-zinc-200 pb-5 dark:border-zinc-800">
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <Link
               href="/rooms"
               className="inline-flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
@@ -433,9 +456,9 @@ export function RoomBrowser({
             <AccountActions />
           </div>
 
-          <div className="mt-4 flex items-end justify-between gap-4">
+          <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div className="min-w-0">
-              <h1 className="truncate text-3xl font-semibold text-zinc-950 dark:text-zinc-50">
+              <h1 className="truncate text-2xl font-semibold text-zinc-950 sm:text-3xl dark:text-zinc-50">
                 {dataRoomQuery.data.name}
               </h1>
 
@@ -444,7 +467,7 @@ export function RoomBrowser({
               </p>
             </div>
 
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0">
               {canMutate && items.length > 0 ? (
                 <label
                   htmlFor={uploadInputId}
@@ -456,7 +479,7 @@ export function RoomBrowser({
                       document.getElementById(uploadInputId)?.click();
                     }
                   }}
-                  className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-zinc-300 bg-white px-3.5 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                  className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-zinc-300 bg-white px-3.5 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
                 >
                   <Upload className="size-4" />
                   Upload files
@@ -464,7 +487,10 @@ export function RoomBrowser({
               ) : null}
 
               {canMutate ? (
-                <CreateFolderDialog dataRoomId={dataRoomId} parentId={folderId} />
+                <CreateFolderDialog
+                  dataRoomId={dataRoomId}
+                  parentId={folderId}
+                />
               ) : null}
             </div>
           </div>
@@ -535,13 +561,39 @@ export function RoomBrowser({
 
         <section className="py-6">
           {selectedFiles.length > 0 ? (
-            <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2.5 dark:border-indigo-900/70 dark:bg-indigo-950/40">
-              <span className="mr-auto text-sm font-medium text-indigo-950 dark:text-indigo-100">
+            <div className="mb-4 grid grid-cols-2 gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2.5 sm:flex sm:flex-wrap sm:items-center dark:border-indigo-900/70 dark:bg-indigo-950/40">
+              <span className="col-span-2 text-sm font-medium text-indigo-950 sm:col-span-1 sm:mr-auto dark:text-indigo-100">
                 {selectedFiles.length} selected
               </span>
-              <button type="button" onClick={() => { setInitialMoveDestination(null); setInitialMoveConflicts([]); setMoveOpen(true); }} className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-medium text-zinc-700 shadow-sm dark:bg-zinc-900 dark:text-zinc-200"><FolderInput className="size-4" />Move</button>
-              <button type="button" onClick={() => setDeleteOpen(true)} className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-medium text-red-600 shadow-sm dark:bg-zinc-900 dark:text-red-400"><Trash2 className="size-4" />Delete</button>
-              <button type="button" onClick={() => setSelectedFileIds(new Set())} aria-label="Clear selection" className="rounded-lg p-2 text-zinc-500 hover:bg-white dark:hover:bg-zinc-900"><X className="size-4" /></button>
+              <button
+                type="button"
+                onClick={() => {
+                  setInitialMoveDestination(null);
+                  setInitialMoveConflicts([]);
+                  setMoveOpen(true);
+                }}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-medium text-zinc-700 shadow-sm dark:bg-zinc-900 dark:text-zinc-200"
+              >
+                <FolderInput className="size-4" />
+                Move
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeleteOpen(true)}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-medium text-red-600 shadow-sm dark:bg-zinc-900 dark:text-red-400"
+              >
+                <Trash2 className="size-4" />
+                Delete
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedFileIds(new Set())}
+                aria-label="Clear selection"
+                className="col-span-2 min-h-11 rounded-lg px-3 py-2 text-sm text-zinc-500 hover:bg-white sm:col-span-1 sm:size-11 sm:p-2 dark:hover:bg-zinc-900"
+              >
+                <X className="mx-auto size-4" />
+                <span className="ml-2 sm:sr-only">Clear selection</span>
+              </button>
             </div>
           ) : null}
           <PdfUpload
@@ -567,6 +619,7 @@ export function RoomBrowser({
                   folder={item}
                   onOpen={() => openFolder(item.id)}
                   canMutate={canMutate}
+                  isMoving={movingToFolderId === item.id}
                   onPersistedFilesDrop={(fileIds, folder) => {
                     void beginDropMove(fileIds, folder);
                   }}
@@ -616,7 +669,9 @@ export function RoomBrowser({
               files,
               folderId: destinationFolderId,
             });
-            toast.success(`${files.length} file${files.length === 1 ? '' : 's'} moved.`);
+            toast.success(
+              `${files.length} file${files.length === 1 ? '' : 's'} moved.`,
+            );
             setSelectedFileIds(new Set());
             setInitialMoveConflicts([]);
           }}

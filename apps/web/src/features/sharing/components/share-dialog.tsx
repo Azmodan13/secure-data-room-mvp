@@ -165,7 +165,7 @@ export function ShareDialog({
             <div className="mt-5">
               <form
                 onSubmit={(event) => void handleGrant(event)}
-                className="flex gap-2"
+                className="flex flex-col gap-2 sm:flex-row"
               >
                 <label
                   className="sr-only"
@@ -185,7 +185,7 @@ export function ShareDialog({
                 <button
                   type="submit"
                   disabled={createGrant.isPending || !email.trim()}
-                  className="inline-flex items-center gap-2 rounded-lg bg-zinc-950 px-3.5 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-950"
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-zinc-950 px-3.5 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-950"
                 >
                   {createGrant.isPending ? (
                     <LoaderCircle className="size-4 animate-spin" />
@@ -264,7 +264,7 @@ export function ShareDialog({
                 </div>
 
                 {publicUrl ? (
-                  <div className="mt-4 flex gap-2">
+                  <div className="mt-4 flex flex-col gap-2 sm:flex-row">
                     <input
                       readOnly
                       value={publicUrl}
@@ -273,7 +273,7 @@ export function ShareDialog({
                     <button
                       type="button"
                       onClick={() => void handleCopy()}
-                      className="inline-flex items-center gap-2 rounded-lg bg-zinc-950 px-3.5 py-2 text-sm font-medium text-white dark:bg-zinc-50 dark:text-zinc-950"
+                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-zinc-950 px-3.5 py-2 text-sm font-medium text-white dark:bg-zinc-50 dark:text-zinc-950"
                     >
                       {copied ? (
                         <Check className="size-4" />
@@ -294,7 +294,9 @@ export function ShareDialog({
                   </p>
                 )}
 
-                <div className="mt-4 flex flex-wrap justify-end gap-2">
+                <div
+                  className={`mt-4 grid gap-2 ${activeLink ? 'grid-cols-2' : 'grid-cols-1 sm:ml-auto sm:max-w-48'}`}
+                >
                   {activeLink ? (
                     <button
                       type="button"
@@ -310,7 +312,7 @@ export function ShareDialog({
                             toast.error('Unable to revoke the public link.'),
                           )
                       }
-                      className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-3.5 py-2 text-sm font-medium text-red-600 disabled:opacity-50 dark:border-red-900 dark:text-red-400"
+                      className="inline-flex min-w-0 items-center justify-center gap-1.5 rounded-lg border border-red-200 px-2 py-2 text-xs font-medium text-red-600 disabled:opacity-50 sm:gap-2 sm:px-3.5 sm:text-sm dark:border-red-900 dark:text-red-400"
                     >
                       <Trash2 className="size-4" />
                       Revoke
@@ -320,7 +322,7 @@ export function ShareDialog({
                     type="button"
                     disabled={createLink.isPending}
                     onClick={() => void handleCreateLink()}
-                    className="inline-flex items-center gap-2 rounded-lg bg-zinc-950 px-3.5 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-950"
+                    className="inline-flex min-w-0 items-center justify-center gap-1.5 rounded-lg bg-zinc-950 px-2 py-2 text-xs font-medium text-white disabled:opacity-50 sm:gap-2 sm:px-3.5 sm:text-sm dark:bg-zinc-50 dark:text-zinc-950"
                   >
                     {createLink.isPending ? (
                       <LoaderCircle className="size-4 animate-spin" />

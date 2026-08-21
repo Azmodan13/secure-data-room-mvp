@@ -29,17 +29,17 @@ export function SharedFileViewer({ fileId }: { fileId: string }) {
     <main className="min-h-screen bg-zinc-50 p-4 sm:p-6 dark:bg-zinc-950">
       <div className="mx-auto max-w-7xl">
         <header className="border-b border-zinc-200 pb-5 dark:border-zinc-800">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <Link
               href="/shared"
-              className="inline-flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-900"
+              className="inline-flex min-h-11 items-center gap-2 text-sm text-zinc-500 hover:text-zinc-900"
             >
               <ArrowLeft className="size-4" />
               Shared with me
             </Link>
             <AccountActions />
           </div>
-          <div className="mt-4 flex items-end justify-between gap-4">
+          <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div className="flex min-w-0 items-center gap-3">
               <div className="rounded-lg bg-red-50 p-2.5 text-red-600 dark:bg-red-950/40">
                 <FileText className="size-5" />
@@ -59,7 +59,7 @@ export function SharedFileViewer({ fileId }: { fileId: string }) {
                 href={viewUrlQuery.data.url}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-2 rounded-lg border border-zinc-300 bg-white px-3.5 py-2 text-sm font-medium dark:border-zinc-700 dark:bg-zinc-900"
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-3.5 py-2 text-sm font-medium dark:border-zinc-700 dark:bg-zinc-900"
               >
                 <ExternalLink className="size-4" />
                 Open in new tab

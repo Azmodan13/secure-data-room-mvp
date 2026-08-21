@@ -23,7 +23,7 @@ export function ThemeSwitcher() {
       <select
         value={theme ?? 'system'}
         onChange={(event) => setTheme(event.target.value)}
-        className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-800 outline-none focus:border-indigo-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+        className="min-h-10 rounded-lg border border-zinc-300 bg-white px-2 py-2 text-sm text-zinc-800 outline-none focus:border-indigo-500 sm:px-3 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
       >
         <option value="light">Light</option>
         <option value="dark">Dark</option>

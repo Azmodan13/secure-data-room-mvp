@@ -68,7 +68,7 @@ export function ReceivedSharesList() {
   });
   if (!shares.length)
     return (
-      <div className="rounded-xl border border-dashed border-zinc-300 px-6 py-20 text-center dark:border-zinc-700">
+      <div className="rounded-xl border border-dashed border-zinc-300 px-4 py-16 text-center sm:px-6 sm:py-20 dark:border-zinc-700">
         <Share2 className="mx-auto size-10 text-zinc-300 dark:text-zinc-600" />
         <h2 className="mt-4 font-semibold text-zinc-950 dark:text-zinc-50">
           Nothing shared with you yet
@@ -88,7 +88,7 @@ export function ReceivedSharesList() {
             <li key={share.id}>
               <Link
                 href={details.href}
-                className="flex items-center gap-4 px-4 py-3.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
+                className="flex min-h-16 items-center gap-3 px-3 py-3.5 hover:bg-zinc-50 sm:gap-4 sm:px-4 dark:hover:bg-zinc-800/60"
               >
                 <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-300">
                   <Icon className="size-5" />
@@ -101,7 +101,7 @@ export function ReceivedSharesList() {
                     {details.label} · Viewer
                   </p>
                 </div>
-                <span className="text-xs text-zinc-400">
+                <span className="hidden shrink-0 text-xs text-zinc-400 sm:inline">
                   Shared{' '}
                   {new Intl.DateTimeFormat('en', {
                     dateStyle: 'medium',
