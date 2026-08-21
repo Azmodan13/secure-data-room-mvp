@@ -1,6 +1,7 @@
 'use client';
 
 import { useSyncExternalStore } from 'react';
+import { Monitor, Moon, Sun } from 'lucide-react';
 import { useTheme } from 'next-themes';
 
 const subscribe = () => () => {};
@@ -14,21 +15,43 @@ export function ThemeSwitcher() {
   );
 
   if (!mounted) {
-    return <div aria-hidden className="h-9 w-24" />;
+    return <div aria-hidden className="h-10 w-[7.75rem]" />;
   }
 
+  const selectedTheme = theme ?? 'system';
+  const options = [
+    { value: 'system', label: 'Use system theme', icon: Monitor },
+    { value: 'light', label: 'Use light theme', icon: Sun },
+    { value: 'dark', label: 'Use dark theme', icon: Moon },
+  ] as const;
+
   return (
-    <label className="text-sm text-zinc-600 dark:text-zinc-400">
-      <span className="sr-only">Color theme</span>
-      <select
-        value={theme ?? 'system'}
-        onChange={(event) => setTheme(event.target.value)}
-        className="min-h-10 rounded-lg border border-zinc-300 bg-white px-2 py-2 text-sm text-zinc-800 outline-none focus:border-indigo-500 sm:px-3 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
-      >
-        <option value="light">Light</option>
-        <option value="dark">Dark</option>
-        <option value="system">System</option>
-      </select>
-    </label>
+    <div
+      role="group"
+      aria-label="Color theme"
+      className="inline-flex rounded-lg border border-zinc-300 bg-white p-1 dark:border-zinc-700 dark:bg-zinc-900"
+    >
+      {options.map(({ value, label, icon: Icon }) => {
+        const isSelected = selectedTheme === value;
+
+        return (
+          <button
+            key={value}
+            type="button"
+            title={label}
+            aria-label={label}
+            aria-pressed={isSelected}
+            onClick={() => setTheme(value)}
+            className={`inline-flex size-8 cursor-pointer items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1 ${
+              isSelected
+                ? 'bg-zinc-100 text-zinc-950 shadow-sm dark:bg-zinc-800 dark:text-white'
+                : 'text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100'
+            }`}
+          >
+            <Icon className="size-4" />
+          </button>
+        );
+      })}
+    </div>
   );
 }

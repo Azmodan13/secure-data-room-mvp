@@ -42,6 +42,7 @@ export type DataRoomItem =
       dataRoomId: string;
       parentId: string | null;
       name: string;
+      sizeBytes: string;
       createdAt: Date;
       updatedAt: Date;
     }
@@ -194,7 +195,28 @@ export class DataRoomsService {
       });
     }
 
-    const cursor = query.cursor ? decodeItemCursor(query.cursor) : null;
+    const cursor = query.cursor
+      ? decodeItemCursor(query.cursor, {
+          sortBy: query.sortBy,
+          sortOrder: query.sortOrder,
+        })
+      : null;
+
+    const comparison = query.sortOrder === 'asc' ? '>' : '<';
+    const idComparison = query.sortOrder === 'asc' ? '>' : '<';
+    const sortExpression =
+      query.sortBy === 'name'
+        ? Prisma.sql`"normalizedName"`
+        : query.sortBy === 'createdAt'
+          ? Prisma.sql`"createdAt"`
+          : Prisma.sql`COALESCE("sizeBytes", 0)`;
+    const cursorValue = cursor
+      ? query.sortBy === 'createdAt'
+        ? Prisma.sql`CAST(${cursor.sortValue} AS TIMESTAMPTZ)`
+        : query.sortBy === 'size'
+          ? Prisma.sql`CAST(${cursor.sortValue} AS BIGINT)`
+          : Prisma.sql`${cursor.sortValue}`
+      : Prisma.empty;
 
     const cursorFilter = cursor
       ? Prisma.sql`
@@ -202,19 +224,41 @@ export class DataRoomsService {
           "kindRank" > ${cursor.kindRank}
           OR (
             "kindRank" = ${cursor.kindRank}
-            AND "normalizedName" > ${cursor.normalizedName}
+            AND ${sortExpression} ${Prisma.raw(comparison)} ${cursorValue}
           )
           OR (
             "kindRank" = ${cursor.kindRank}
-            AND "normalizedName" = ${cursor.normalizedName}
-            AND "id" > CAST(${cursor.id} AS UUID)
+            AND ${sortExpression} = ${cursorValue}
+            AND "id" ${Prisma.raw(idComparison)} CAST(${cursor.id} AS UUID)
           )
       `
       : Prisma.empty;
 
     const rows = await this.prisma.$queryRaw<ItemRow[]>(
       Prisma.sql`
-      WITH all_items AS (
+      WITH RECURSIVE folder_tree AS (
+        SELECT "id" AS "rootId", "id" AS "folderId"
+        FROM "folders"
+        WHERE "data_room_id" = CAST(${dataRoomId} AS UUID)
+          AND "parent_id" IS NOT DISTINCT FROM CAST(${folderId} AS UUID)
+
+        UNION ALL
+
+        SELECT tree."rootId", child."id"
+        FROM folder_tree AS tree
+        INNER JOIN "folders" AS child ON child."parent_id" = tree."folderId"
+      ),
+      folder_totals AS (
+        SELECT
+          tree."rootId",
+          COALESCE(SUM(file."size_bytes"), 0)::BIGINT AS "totalBytes"
+        FROM folder_tree AS tree
+        LEFT JOIN "files" AS file
+          ON file."folder_id" = tree."folderId"
+          AND file."upload_status" = 'READY'::"UploadStatus"
+        GROUP BY tree."rootId"
+      ),
+      all_items AS (
         SELECT
           'folder'::TEXT AS "type",
           0::INTEGER AS "kindRank",
@@ -223,11 +267,12 @@ export class DataRoomsService {
           "parent_id" AS "containerId",
           "name",
           "normalized_name" AS "normalizedName",
-          NULL::BIGINT AS "sizeBytes",
+          totals."totalBytes" AS "sizeBytes",
           NULL::TEXT AS "mimeType",
           "created_at" AS "createdAt",
           "updated_at" AS "updatedAt"
         FROM "folders"
+        INNER JOIN folder_totals AS totals ON totals."rootId" = "folders"."id"
         WHERE
           "data_room_id" = CAST(${dataRoomId} AS UUID)
           AND "parent_id" IS NOT DISTINCT FROM
@@ -259,8 +304,8 @@ export class DataRoomsService {
       ${cursorFilter}
       ORDER BY
         "kindRank" ASC,
-        "normalizedName" ASC,
-        "id" ASC
+        ${sortExpression} ${Prisma.raw(query.sortOrder.toUpperCase())},
+        "id" ${Prisma.raw(query.sortOrder.toUpperCase())}
       LIMIT ${query.limit + 1}
     `,
     );
@@ -276,6 +321,7 @@ export class DataRoomsService {
           dataRoomId: row.dataRoomId,
           parentId: row.containerId,
           name: row.name,
+          sizeBytes: (row.sizeBytes ?? 0n).toString(),
           createdAt: row.createdAt,
           updatedAt: row.updatedAt,
         };
@@ -303,7 +349,14 @@ export class DataRoomsService {
         hasMore && lastRow
           ? encodeItemCursor({
               kind: lastRow.type,
-              normalizedName: lastRow.normalizedName,
+              sortBy: query.sortBy,
+              sortOrder: query.sortOrder,
+              sortValue:
+                query.sortBy === 'name'
+                  ? lastRow.normalizedName
+                  : query.sortBy === 'createdAt'
+                    ? lastRow.createdAt.toISOString()
+                    : (lastRow.sizeBytes ?? 0n).toString(),
               id: lastRow.id,
             })
           : null,

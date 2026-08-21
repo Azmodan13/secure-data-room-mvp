@@ -4,6 +4,7 @@ import type {
   DataRoomItemsResponse,
   DataRoomResponse,
   DataRoomsResponse,
+  ItemPageSize,
 } from './types';
 import type { DeletionSummary, DeletionSummaryResponse } from '@/lib/api/types';
 
@@ -44,9 +45,14 @@ export async function getDataRoomItems(
   dataRoomId: string,
   folderId: string | null,
   cursor: string | null,
+  sortBy: 'name' | 'createdAt' | 'size',
+  sortOrder: 'asc' | 'desc',
+  pageSize: ItemPageSize,
 ): Promise<DataRoomItemsResponse> {
   const searchParams = new URLSearchParams({
-    limit: String(PAGE_SIZE),
+    limit: String(pageSize),
+    sortBy,
+    sortOrder,
   });
 
   if (folderId) {

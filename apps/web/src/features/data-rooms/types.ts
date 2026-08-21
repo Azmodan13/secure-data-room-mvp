@@ -22,6 +22,7 @@ export type FolderItem = {
   dataRoomId: string;
   parentId: string | null;
   name: string;
+  sizeBytes: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -39,6 +40,9 @@ export type FileItem = {
 };
 
 export type DataRoomItem = FolderItem | FileItem;
+export type ItemSortBy = 'name' | 'createdAt' | 'size';
+export type SortOrder = 'asc' | 'desc';
+export type ItemPageSize = 10 | 25 | 50;
 
 export type DataRoomResponse = {
   data: DataRoom;
