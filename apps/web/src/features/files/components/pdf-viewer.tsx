@@ -101,10 +101,10 @@ export function PdfViewer({
     <main className="min-h-screen bg-zinc-50 p-4 sm:p-6 dark:bg-zinc-950">
       <div className="mx-auto max-w-7xl">
         <header className="border-b border-zinc-200 pb-5 dark:border-zinc-800">
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <Link
               href={backHref}
-              className="inline-flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+              className="inline-flex min-h-11 items-center gap-2 text-sm text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
             >
               <ArrowLeft className="size-4" />
               Back to folder
@@ -130,13 +130,13 @@ export function PdfViewer({
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {viewUrlQuery.data ? (
                 <a
                   href={viewUrlQuery.data.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-3.5 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                  className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-3.5 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
                 >
                   <ExternalLink className="size-4" />
                   Open in new tab

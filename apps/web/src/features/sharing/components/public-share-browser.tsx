@@ -93,7 +93,7 @@ export function PublicShareBrowser({
   }
 
   return (
-    <main className="min-h-screen bg-zinc-50 p-6 dark:bg-zinc-950">
+    <main className="min-h-screen bg-zinc-50 p-4 sm:p-6 dark:bg-zinc-950">
       <div className="mx-auto max-w-6xl">
         <PublicHeader title={root.name} />
         <nav
@@ -101,15 +101,17 @@ export function PublicShareBrowser({
           className="flex min-h-14 items-center gap-1 overflow-x-auto border-b border-zinc-200 py-3 text-sm dark:border-zinc-800"
         >
           {crumbs.map((crumb, index) => (
-            <div key={crumb.id} className="flex items-center gap-1">
+            <div key={crumb.id} className="flex shrink-0 items-center gap-1">
               {index ? <ChevronRight className="size-4 text-zinc-400" /> : null}
               {index === crumbs.length - 1 ? (
-                <span className="font-medium">{crumb.name}</span>
+                <span className="max-w-52 truncate font-medium">
+                  {crumb.name}
+                </span>
               ) : (
                 <button
                   type="button"
                   onClick={() => openCrumb(crumb.id)}
-                  className="font-medium text-zinc-500 hover:text-zinc-950 dark:text-zinc-400"
+                  className="max-w-52 truncate font-medium text-zinc-500 hover:text-zinc-950 dark:text-zinc-400"
                 >
                   {crumb.name}
                 </button>
@@ -135,7 +137,7 @@ export function PublicShareBrowser({
               </ul>
             </div>
           ) : (
-            <div className="rounded-xl border border-dashed border-zinc-300 px-6 py-20 text-center dark:border-zinc-700">
+            <div className="rounded-xl border border-dashed border-zinc-300 px-4 py-16 text-center sm:px-6 sm:py-20 dark:border-zinc-700">
               <Folder className="mx-auto size-10 text-zinc-300" />
               <h2 className="mt-4 font-semibold">
                 This shared folder is empty
@@ -159,7 +161,7 @@ function PublicFile({
 }) {
   const query = usePublicViewUrl(token, fileId);
   return (
-    <main className="min-h-screen bg-zinc-50 p-6 dark:bg-zinc-950">
+    <main className="min-h-screen bg-zinc-50 p-4 sm:p-6 dark:bg-zinc-950">
       <div className="mx-auto max-w-7xl">
         <PublicHeader title={name ?? 'Shared PDF'} />
         <section className="relative mt-6 min-h-[75vh] overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
@@ -183,13 +185,15 @@ function PublicFile({
 }
 function PublicHeader({ title }: { title: string }) {
   return (
-    <header className="flex items-center justify-between gap-4 border-b border-zinc-200 pb-5 dark:border-zinc-800">
+    <header className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-200 pb-5 dark:border-zinc-800">
       <div className="min-w-0">
         <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-indigo-600 dark:text-indigo-300">
           <ShieldCheck className="size-4" />
           Read-only public share
         </p>
-        <h1 className="mt-1 truncate text-3xl font-semibold">{title}</h1>
+        <h1 className="mt-1 truncate text-2xl font-semibold sm:text-3xl">
+          {title}
+        </h1>
       </div>
       <ThemeSwitcher />
     </header>
@@ -207,7 +211,7 @@ function PublicFolderRow({
       <button
         type="button"
         onClick={onOpen}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
+        className="flex min-h-12 w-full items-center gap-3 px-4 py-3 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
       >
         <Folder className="size-5 text-indigo-500" />
         <span className="min-w-0 flex-1 truncate text-sm font-medium">
