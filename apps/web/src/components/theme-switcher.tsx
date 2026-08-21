@@ -15,7 +15,7 @@ export function ThemeSwitcher() {
   );
 
   if (!mounted) {
-    return <div aria-hidden className="h-10 w-[7.75rem]" />;
+    return <div aria-hidden className="h-10 w-[6.5rem]" />;
   }
 
   const selectedTheme = theme ?? 'system';
@@ -29,7 +29,7 @@ export function ThemeSwitcher() {
     <div
       role="group"
       aria-label="Color theme"
-      className="inline-flex rounded-lg border border-zinc-300 bg-white p-1 dark:border-zinc-700 dark:bg-zinc-900"
+      className="inline-flex h-10 items-center rounded-lg border border-zinc-300 bg-white p-0.5 dark:border-zinc-700 dark:bg-zinc-900"
     >
       {options.map(({ value, label, icon: Icon }) => {
         const isSelected = selectedTheme === value;
@@ -38,6 +38,7 @@ export function ThemeSwitcher() {
           <button
             key={value}
             type="button"
+            data-compact-control
             title={label}
             aria-label={label}
             aria-pressed={isSelected}
@@ -48,7 +49,7 @@ export function ThemeSwitcher() {
                 : 'text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100'
             }`}
           >
-            <Icon className="size-4" />
+            <Icon className="size-3.5" />
           </button>
         );
       })}

@@ -207,7 +207,7 @@ function FileRow({
         );
         event.dataTransfer.effectAllowed = 'move';
       }}
-      className={`group relative min-w-0 overflow-hidden ${viewMode === 'grid' ? 'flex min-h-36 flex-col border border-zinc-200 p-2 dark:border-zinc-800' : 'flex sm:grid sm:grid-cols-[2rem_minmax(0,1fr)_8rem_7rem_3rem] sm:items-center'} rounded-lg transition-colors ${
+      className={`group relative min-w-0 overflow-hidden ${viewMode === 'grid' ? 'flex min-h-36 flex-col border border-zinc-200 p-2 dark:border-zinc-800' : 'grid grid-cols-[2rem_minmax(0,1fr)_2.5rem] items-center sm:grid-cols-[2rem_minmax(0,1fr)_8rem_7rem_3rem]'} rounded-lg transition-colors ${
         canMutate ? 'cursor-grab active:cursor-grabbing' : ''
       } ${
         selected
@@ -217,7 +217,7 @@ function FileRow({
     >
       {canMutate ? (
         <label
-          className={`ml-2 flex size-10 shrink-0 cursor-pointer items-center justify-center sm:ml-3 sm:size-5 ${selected ? 'opacity-100' : 'opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100'}`}
+          className={`flex size-10 shrink-0 cursor-pointer items-center justify-center sm:ml-3 sm:size-5 ${selected ? 'opacity-100' : 'opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100'}`}
         >
           <input
             type="checkbox"
@@ -231,7 +231,7 @@ function FileRow({
       <Link
         href={`/rooms/${file.dataRoomId}/files/${file.id}`}
         draggable={false}
-        className={`${viewMode === 'grid' ? 'flex w-full min-w-0 flex-1 flex-col items-start' : 'flex min-w-0 items-center gap-3'} rounded-lg px-3 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40`}
+        className={`${viewMode === 'grid' ? 'flex w-full min-w-0 flex-1 flex-col items-start' : 'flex min-w-0 items-center gap-3 px-2 sm:px-3'} rounded-lg py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40`}
       >
         <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-300">
           <FileText className="size-5" />
@@ -247,7 +247,12 @@ function FileRow({
             <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
               {formatFileSize(file.sizeBytes)}
             </p>
-          ) : null}
+          ) : (
+            <p className="mt-0.5 truncate text-xs text-zinc-500 sm:hidden dark:text-zinc-400">
+              {new Date(file.createdAt).toLocaleDateString()} ·{' '}
+              {formatFileSize(file.sizeBytes)}
+            </p>
+          )}
         </div>
       </Link>
       {viewMode === 'table' ? (
@@ -263,7 +268,9 @@ function FileRow({
       {canMutate ? (
         <div
           className={
-            viewMode === 'grid' ? 'absolute right-2 top-2' : 'shrink-0 pr-2'
+            viewMode === 'grid'
+              ? 'absolute right-2 top-2'
+              : 'flex shrink-0 justify-center sm:pr-2'
           }
         >
           <FileActions file={file} />
@@ -382,7 +389,7 @@ function FolderRow({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className={`relative min-w-0 overflow-hidden ${viewMode === 'grid' ? 'flex min-h-36 flex-col border border-zinc-200 p-2 dark:border-zinc-800' : 'flex sm:grid sm:grid-cols-[2rem_minmax(0,1fr)_8rem_7rem_3rem] sm:items-center'} rounded-lg transition-colors ${
+      className={`relative min-w-0 overflow-hidden ${viewMode === 'grid' ? 'flex min-h-36 flex-col border border-zinc-200 p-2 dark:border-zinc-800' : 'grid grid-cols-[2rem_minmax(0,1fr)_2.5rem] items-center sm:grid-cols-[2rem_minmax(0,1fr)_8rem_7rem_3rem]'} rounded-lg transition-colors ${
         isMoving
           ? 'bg-indigo-50 ring-1 ring-inset ring-indigo-200 dark:bg-indigo-950/40 dark:ring-indigo-900'
           : isFileOver
@@ -390,7 +397,7 @@ function FolderRow({
             : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/70'
       }`}
     >
-      {viewMode === 'table' ? <span className="hidden sm:block" /> : null}
+      {viewMode === 'table' ? <span /> : null}
       <button
         type="button"
         onClick={onOpen}
@@ -422,7 +429,12 @@ function FolderRow({
             <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
               {formatFileSize(folder.sizeBytes)}
             </p>
-          ) : null}
+          ) : (
+            <p className="mt-0.5 truncate text-xs text-zinc-500 sm:hidden dark:text-zinc-400">
+              {new Date(folder.createdAt).toLocaleDateString()} ·{' '}
+              {formatFileSize(folder.sizeBytes)}
+            </p>
+          )}
         </div>
       </button>
       {viewMode === 'table' ? (
@@ -439,7 +451,9 @@ function FolderRow({
       {canMutate ? (
         <div
           className={
-            viewMode === 'grid' ? 'absolute right-2 top-2' : 'shrink-0 pr-2'
+            viewMode === 'grid'
+              ? 'absolute right-2 top-2'
+              : 'flex shrink-0 justify-center sm:pr-2'
           }
         >
           <FolderActions dataRoomId={dataRoomId} folder={folder} />
