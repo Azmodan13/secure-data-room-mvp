@@ -152,6 +152,32 @@ describe('FoldersService deletion', () => {
       service.getDeleteSummary('owner-1', folderId),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
+
+  it('stops folder creation before data access when mutation access is denied', async () => {
+    assertCanMutate.mockRejectedValue(
+      new NotFoundException('Resource is not available.'),
+    );
+
+    await expect(
+      service.create('viewer-1', 'room-1', { name: 'Private folder' }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(queryRaw).not.toHaveBeenCalled();
+    expect(runTransaction).not.toHaveBeenCalled();
+  });
+
+  it('stops folder rename before data access when mutation access is denied', async () => {
+    assertCanMutate.mockRejectedValue(
+      new NotFoundException('Resource is not available.'),
+    );
+
+    await expect(
+      service.rename('viewer-1', folderId, { name: 'Leaked rename' }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(queryRaw).not.toHaveBeenCalled();
+    expect(runTransaction).not.toHaveBeenCalled();
+  });
 });
 
 describe('FoldersService breadcrumbs', () => {

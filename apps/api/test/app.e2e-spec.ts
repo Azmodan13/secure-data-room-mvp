@@ -86,6 +86,25 @@ describe('AppController (e2e)', () => {
       });
   });
 
+  it.each([
+    ['GET', '/api/v1/data-rooms'],
+    ['POST', '/api/v1/data-rooms'],
+    ['GET', '/api/v1/shares/received'],
+    [
+      'POST',
+      '/api/v1/data-rooms/10000000-0000-4000-8000-000000000001/upload-intents',
+    ],
+  ])('%s %s rejects a missing token', (method, path) => {
+    const agent = request(app!.getHttpServer());
+    const call = method === 'GET' ? agent.get(path) : agent.post(path);
+
+    return call.expect(401).expect(({ body }) => {
+      const error = body as ErrorResponse;
+
+      expect(error.message).toBe('Bearer access token is required.');
+    });
+  });
+
   afterEach(async () => {
     await app?.close();
     app = undefined;
