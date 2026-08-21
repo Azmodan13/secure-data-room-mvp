@@ -1,11 +1,12 @@
 'use client';
 
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { MoreHorizontal, Pencil, Share2, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { DeleteDialog } from '@/components/delete-dialog';
 import { RenameDialog } from '@/components/rename-dialog';
+import { ShareDialog } from '@/features/sharing/components/share-dialog';
 import { useDeleteDataRoom, useRenameDataRoom } from '../mutations';
 import { useDataRoomDeleteSummary } from '../queries';
 import type { DataRoom } from '../types';
@@ -13,6 +14,7 @@ import type { DataRoom } from '../types';
 export function DataRoomActions({ dataRoom }: { dataRoom: DataRoom }) {
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const renameMutation = useRenameDataRoom(dataRoom.id);
   const deleteMutation = useDeleteDataRoom(dataRoom.id);
   const summaryQuery = useDataRoomDeleteSummary(dataRoom.id, deleteOpen);
@@ -44,6 +46,14 @@ export function DataRoomActions({ dataRoom }: { dataRoom: DataRoom }) {
               Rename
             </DropdownMenu.Item>
 
+            <DropdownMenu.Item
+              onSelect={() => setShareOpen(true)}
+              className="flex cursor-default items-center gap-2 rounded-md px-2.5 py-2 text-sm text-zinc-700 outline-none data-[highlighted]:bg-zinc-100 data-[highlighted]:text-zinc-950 dark:text-zinc-200 dark:data-[highlighted]:bg-zinc-800 dark:data-[highlighted]:text-zinc-50"
+            >
+              <Share2 className="size-4" />
+              Share
+            </DropdownMenu.Item>
+
             <DropdownMenu.Separator className="my-1 h-px bg-zinc-200 dark:bg-zinc-700" />
 
             <DropdownMenu.Item
@@ -56,6 +66,16 @@ export function DataRoomActions({ dataRoom }: { dataRoom: DataRoom }) {
           </DropdownMenu.Content>
         </DropdownMenu.Portal>
       </DropdownMenu.Root>
+
+      <ShareDialog
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+        target={{
+          targetType: 'dataRoom',
+          targetId: dataRoom.id,
+          name: dataRoom.name,
+        }}
+      />
 
       <RenameDialog
         open={renameOpen}

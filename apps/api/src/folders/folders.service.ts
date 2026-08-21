@@ -194,15 +194,27 @@ export class FoldersService {
   }
 
   async getBreadcrumbs(
-    ownerId: string,
+    userId: string,
     folderId: string,
   ): Promise<FolderBreadcrumb[]> {
-    // Owner-only in AZM-29. Shared/public breadcrumbs must start at
-    // their explicit share root and are implemented in AZM-34.
-    await this.accessPolicy.assertCanMutate(ownerId, {
+    await this.accessPolicy.assertCanRead(userId, {
       type: 'folder',
       id: folderId,
     });
+
+    const folder = await this.prisma.folder.findUnique({
+      where: { id: folderId },
+      select: {
+        dataRoomId: true,
+        dataRoom: {
+          select: { ownerId: true },
+        },
+      },
+    });
+
+    if (!folder) {
+      throw new NotFoundException('Resource is not available.');
+    }
 
     const rows = await this.prisma.$queryRaw<BreadcrumbRow[]>(
       Prisma.sql`
@@ -242,7 +254,45 @@ export class FoldersService {
       throw new NotFoundException('Resource is not available.');
     }
 
-    return rows.map(({ id, name }) => ({
+    let visibleRows = rows;
+
+    if (folder.dataRoom.ownerId !== userId) {
+      const grants = await this.prisma.shareGrant.findMany({
+        where: {
+          recipientUserId: userId,
+          revokedAt: null,
+          OR: [
+            { dataRoomId: folder.dataRoomId },
+            { folderId: { in: rows.map((row) => row.id) } },
+          ],
+        },
+        select: {
+          dataRoomId: true,
+          folderId: true,
+        },
+      });
+
+      const hasDataRoomGrant = grants.some(
+        (grant) => grant.dataRoomId === folder.dataRoomId,
+      );
+
+      if (!hasDataRoomGrant) {
+        const grantedFolderIds = new Set(
+          grants.flatMap((grant) => (grant.folderId ? [grant.folderId] : [])),
+        );
+        const shareRootIndex = rows.findIndex((row) =>
+          grantedFolderIds.has(row.id),
+        );
+
+        if (shareRootIndex < 0) {
+          throw new NotFoundException('Resource is not available.');
+        }
+
+        visibleRows = rows.slice(shareRootIndex);
+      }
+    }
+
+    return visibleRows.map(({ id, name }) => ({
       id,
       name,
     }));

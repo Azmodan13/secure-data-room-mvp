@@ -230,6 +230,21 @@ export class SharingService {
     return { items, hasMore: folders.length + files.length > PAGE_SIZE };
   }
 
+  async getPublicFolder(token: string, folderId: string) {
+    const tokenHash = this.hashToken(token);
+    await this.getActivePublicLink(token);
+    await this.accessPolicy.assertCanReadPublic(tokenHash, {
+      type: 'folder',
+      id: folderId,
+    });
+    const folder = await this.prisma.folder.findUnique({
+      where: { id: folderId },
+      select: { id: true, dataRoomId: true, parentId: true, name: true },
+    });
+    if (!folder) this.throwUnavailable();
+    return folder;
+  }
+
   hashToken(token: string): string {
     return createHash('sha256').update(token).digest('hex');
   }

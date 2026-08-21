@@ -11,15 +11,18 @@ type AsyncMock = jest.MockedFunction<(args: unknown) => Promise<unknown>>;
 describe('SharingService', () => {
   let service: SharingService;
   let assertCanMutate: AsyncMock;
+  let assertCanReadPublic: AsyncMock;
   let publicUpdateMany: AsyncMock;
   let publicCreate: AsyncMock;
   let publicFindFirst: AsyncMock;
   let requireRegisteredRecipient: AsyncMock;
   let grantFindFirst: AsyncMock;
   let grantCreate: AsyncMock;
+  let folderFindUnique: AsyncMock;
 
   beforeEach(() => {
     assertCanMutate = jest.fn();
+    assertCanReadPublic = jest.fn();
     publicUpdateMany = jest.fn();
     publicCreate = jest.fn().mockResolvedValue({
       id: 'link-1',
@@ -29,6 +32,7 @@ describe('SharingService', () => {
     requireRegisteredRecipient = jest.fn();
     grantFindFirst = jest.fn();
     grantCreate = jest.fn();
+    folderFindUnique = jest.fn();
 
     const transaction = jest.fn((callback: (tx: unknown) => unknown) =>
       Promise.resolve(
@@ -40,10 +44,12 @@ describe('SharingService', () => {
     const prisma = {
       publicLink: { findFirst: publicFindFirst },
       shareGrant: { findFirst: grantFindFirst, create: grantCreate },
+      folder: { findUnique: folderFindUnique },
       $transaction: transaction,
     } as unknown as PrismaService;
     const accessPolicy = {
       assertCanMutate,
+      assertCanReadPublic,
       requireRegisteredRecipient,
     } as unknown as AccessPolicyService;
     service = new SharingService(prisma, accessPolicy);
@@ -117,5 +123,36 @@ describe('SharingService', () => {
     await expect(service.getPublicRoot('invalid-token')).rejects.toBeInstanceOf(
       NotFoundException,
     );
+  });
+
+  it('authorizes public folder metadata through the token ancestry policy', async () => {
+    publicFindFirst.mockResolvedValue({
+      id: 'link-1',
+      dataRoomId: 'room-1',
+      folderId: null,
+      fileId: null,
+      dataRoom: { id: 'room-1', name: 'Room' },
+      folder: null,
+      file: null,
+    });
+    folderFindUnique.mockResolvedValue({
+      id: 'folder-1',
+      dataRoomId: 'room-1',
+      parentId: null,
+      name: 'Folder',
+    });
+
+    const result = await service.getPublicFolder('plain-token', 'folder-1');
+
+    expect(assertCanReadPublic).toHaveBeenCalledWith(
+      service.hashToken('plain-token'),
+      { type: 'folder', id: 'folder-1' },
+    );
+    expect(result).toEqual({
+      id: 'folder-1',
+      dataRoomId: 'room-1',
+      parentId: null,
+      name: 'Folder',
+    });
   });
 });
