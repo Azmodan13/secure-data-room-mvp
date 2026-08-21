@@ -1,14 +1,14 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { Toaster } from 'sonner';
 import { QueryProvider } from './query-provider';
+import { ThemedToaster } from './themed-toaster';
 
 export function AppProviders({ children }: { children: ReactNode }) {
   return (
     <QueryProvider>
       {children}
-      <Toaster richColors position="bottom-right" />
+      <ThemedToaster />
     </QueryProvider>
   );
 }
